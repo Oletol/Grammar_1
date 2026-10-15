@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-} from "./fb.js?v=20261015g1";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261015g1";
+} from "./fb.js?v=20261015g3";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261015g3";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
-  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, gradeExercise, wireFlashcards, isManual,
-} from "./common.js?v=20261015g1";
-import "./speaking.js?v=20261015g1";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g1";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261015g1";
+  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
+} from "./common.js?v=20261015g3";
+import "./speaking.js?v=20261015g3";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g3";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261015g3";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -45,6 +45,7 @@ document.title = `Teacher's Edition · ${COURSE_TITLE}`;
 document.querySelectorAll("[data-course-title]").forEach((el) => (el.textContent = COURSE_TITLE));
 initShell();
 wireFlashcards();
+wireLang();
 wireUnitNav($("#unit-nav"), () => renderNav());
 
 function toast(t, ms = 3500) {
@@ -95,7 +96,7 @@ onAuthStateChanged(auth, async (user) => {
 // ------------------------------------------------------------------ context: group + unit
 function fillCtx() {
   $("#ctx-group").innerHTML = T.groups.map((g) => `<option value="${esc(g.id)}" ${g.id === T.gid ? "selected" : ""}>${esc(g.name || g.id)}</option>`).join("") || `<option value="">no groups yet</option>`;
-  $("#ctx-unit").innerHTML = T.units.map((u, i) => `<option value="${esc(u.id)}" ${u.id === T.unitId ? "selected" : ""}>Unit ${u.order || i + 1}</option>`).join("") || `<option value="">no units yet</option>`;
+  $("#ctx-unit").innerHTML = T.units.map((u, i) => `<option value="${esc(u.id)}" ${u.id === T.unitId ? "selected" : ""}>${esc(unitLabel(u, i))}</option>`).join("") || `<option value="">no units yet</option>`;
 }
 $("#ctx-group").addEventListener("change", (e) => { T.gid = e.target.value; ls.set("gid", T.gid); T.selected = null; subscribeCtx(); render(); });
 $("#ctx-unit").addEventListener("change", (e) => setUnit(e.target.value));
@@ -163,7 +164,8 @@ window.addEventListener("hashchange", () => {
 
 const group = () => T.groups.find((g) => g.id === T.gid);
 const unit = () => T.units.find((u) => u.id === T.unitId);
-const unitNum = (u) => u.order || T.units.indexOf(u) + 1;
+const unitNum = (u) => unitNo(u, T.units.indexOf(u));
+const uLabel = (u) => unitLabel(u, T.units.indexOf(u));
 
 function renderNav() {
   const r = route();
@@ -208,22 +210,22 @@ function viewUnit(r) {
   const u = T.units.find((x) => x.id === r.unit);
   if (!u) return pageHead("Unit", "Unit not found");
   const n = unitNum(u);
-  $("#crumb").innerHTML = `<b>Unit ${n}</b> &middot; ${esc(u.title)}`;
+  $("#crumb").innerHTML = `<b>${esc(uLabel(u))}</b> &middot; ${esc(u.title)}`;
   const g = group();
   const bar = g && u.status !== "soon" ? accessBar(u, g) : "";
-  if (u.status === "soon") return pageHead(`Unit ${n}`, esc(u.title)) + `<div class="locked-msg"><span class="big">🛠</span>This unit is still being prepared. Import its content in <a href="#tools/content">Course content</a>.</div>`;
+  if (u.status === "soon") return pageHead(esc(uLabel(u)), esc(u.title)) + `<div class="locked-msg"><span class="big">🛠</span>This unit is still being prepared. Import its content in <a href="#tools/content">Course content</a>.</div>`;
   const d = T.unitData[u.id];
   if (!d) { loadUnitData(u.id).then(() => render(true)); return `<p class="muted">Loading…</p>`; }
-  if (!d.content) return pageHead(`Unit ${n}`, esc(u.title)) + `<div class="locked-msg">This unit has no content yet.</div>`;
+  if (!d.content) return pageHead(esc(uLabel(u)), esc(u.title)) + `<div class="locked-msg">This unit has no content yet.</div>`;
   const secs = d.content.sections;
   const sec = secs.find((s) => s.id === r.section) || secs[0];
   const i = secs.indexOf(sec);
   const meta = (u.sections || []).find((s) => s.id === sec.id) || {};
-  $("#crumb").innerHTML = `<b>Unit ${n}</b> &middot; ${n}.${i + 1} ${esc(sec.title)}`;
+  $("#crumb").innerHTML = `<b>${esc(uLabel(u))}</b> &middot; ${n}.${i + 1} ${esc(sec.title)}`;
   const blocks = [...sec.blocks];
   for (const note of [...(d.notes[sec.id] || [])].reverse()) blocks.splice(note.at, 0, { type: "teacher-note", html: note.html });
   const prev = secs[i - 1], next = secs[i + 1];
-  return bar + docxBar(u) + pageHead(`Unit ${n} &middot; ${n}.${i + 1}`, esc(sec.title), esc(meta.subtitle || sec.subtitle || ""))
+  return bar + docxBar(u) + pageHead(`${esc(uLabel(u))} &middot; ${n}.${i + 1}`, esc(sec.title), esc(meta.subtitle || sec.subtitle || ""))
     + renderBlocks(blocks, (ex) => ({
       key: d.keys[ex.id] || {}, readOnly: true,
       tag: ex.check === "teacher" ? (isManual(ex) ? "Writing check by the teacher" : "Checked by the teacher") : "",
@@ -237,7 +239,7 @@ function viewUnit(r) {
 
 // Download the whole unit as a Word file (no interactive elements): Student's Book or Teacher's Book with keys
 function docxBar(u) {
-  return `<div class="dl-bar"><span>Download Unit ${esc(unitNum(u))} as Word:</span>
+  return `<div class="dl-bar"><span>Download ${esc(uLabel(u))} as Word:</span>
     <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="student">Student's Book (.docx)</button>
     <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="teacher">Teacher's Book (.docx)</button></div>`;
 }
@@ -249,13 +251,13 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261015g1");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261015g3");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => ({ ...s, subtitle: (u.sections || []).find((m) => m.id === s.id)?.subtitle || s.subtitle || "" }));
-    const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitTitle: u.title, sections,
+    const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
       keys: teacher ? d.keys : {}, notes: teacher ? d.notes : {}, teacher });
     const safe = (t) => String(t).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    saveBlob(blob, `${safe(COURSE_TITLE)}_Unit-${unitNum(u)}_${teacher ? "Teachers-Book" : "Students-Book"}.docx`);
+    saveBlob(blob, `${safe(COURSE_TITLE)}_${safe(uLabel(u))}_${teacher ? "Teachers-Book" : "Students-Book"}.docx`);
   } catch (e) { console.error(e); toast("Could not create the Word file: " + (e.message || e), 6000); }
   finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
 }
@@ -478,7 +480,7 @@ async function releaseUnit(gid, unitId) {
 function viewWorks() {
   const g = group(), u = unit();
   const head = pageHead("Teaching tools", "Student work",
-    g && u ? `Unit ${unitNum(u)} · ${esc(u.title)} — group ${esc(g.name)}` : "");
+    g && u ? `${esc(uLabel(u))} · ${esc(u.title)} — group ${esc(g.name)}` : "");
   if (!g || !u) return head + `<div class="box">Choose a group and a unit at the top of the page.</div>`;
   const data = T.unitData[u.id];
   if (!data) return head + `<p class="muted">Loading…</p>`;
@@ -569,7 +571,7 @@ async function saveGrades(uid) {
 function viewStats() {
   const g = group(), u = unit();
   const head = pageHead("Teaching tools", "Analytics",
-    g && u ? `Unit ${unitNum(u)} · ${esc(u.title)} — group ${esc(g.name)}` : "")
+    g && u ? `${esc(uLabel(u))} · ${esc(u.title)} — group ${esc(g.name)}` : "")
     + `<label class="row"><input type="checkbox" id="inc-drafts" ${T.includeDrafts ? "checked" : ""}> include drafts that have not been submitted</label>`;
   if (!g || !u) return head + `<div class="box">Choose a group and a unit at the top of the page.</div>`;
   const data = T.unitData[u.id];
@@ -648,7 +650,7 @@ function heat(p, light) {
 // ================================================================== Course content
 function viewContent() {
   const rows = T.units.map((u) => `<tr>
-    <td class="num">${esc(u.order)}</td><td><code>${esc(u.id)}</code></td><td>${u.status === "soon" ? esc(u.title) : `<a href="#${esc(u.id)}">${esc(u.title)}</a>`}</td>
+    <td class="num">${esc(unitNo(u))}</td><td><code>${esc(u.id)}</code></td><td>${u.status === "soon" ? esc(u.title) : `<a href="#${esc(u.id)}">${esc(u.title)}</a>`}</td>
     <td>${u.status === "soon" ? `<span class="pill off">coming soon</span>` : `<span class="pill on">${(u.sections || []).length} sections</span>`}</td>
     <td>${u.status === "soon" ? "" : `<button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="student" title="Student's Book in Word">Student .docx</button>
       <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="teacher" title="Teacher's Book in Word, with keys and notes">Teacher .docx</button>`}
@@ -691,6 +693,7 @@ function splitUnit(u) {
   const hasContent = Array.isArray(u.sections) && u.sections.some((s) => (s.blocks || []).length);
   const meta = {
     title: u.title, order: Number(u.order ?? 0),
+    ...(u.label ? { label: String(u.label) } : {}), ...(u.num !== undefined ? { num: String(u.num) } : {}), ...(u.series ? { series: String(u.series) } : {}),
     status: u.status || (hasContent ? "ready" : "soon"),
     sections: (u.sections || []).map((s) => ({ id: s.id, title: s.title, ...(s.subtitle ? { subtitle: s.subtitle } : {}) })),
   };
@@ -754,7 +757,7 @@ async function importCourse() {
     const summary = parts.filter((p) => p.content).map((p, i) => {
       const u = list[parts.indexOf(p)];
       const nEx = p.content.sections.reduce((n, sec) => n + sec.blocks.filter((b) => b.type === "exercise" || b.numbered).length, 0);
-      return `Unit ${u.order || i + 1}: ${p.content.sections.length} ${p.content.sections.length === 1 ? "section" : "sections"}, ${nEx} exercises`;
+      return `${unitLabel(u, i)}: ${p.content.sections.length} ${p.content.sections.length === 1 ? "section" : "sections"}, ${nEx} exercises`;
     }).join("; ");
     setImportStatus(`<b style="color:var(--ok)">✓ Imported ${parts.length} units at ${fmtTime(new Date())}.</b> ${esc(summary)}`);
     toast(`Units imported: ${parts.length}`);
@@ -906,7 +909,7 @@ function viewTests() {
       : cfg?.open ? `<span class="pill warn">open now</span>`
       : cfg ? `<span class="pill off">closed</span>` : `<span class="pill off">hidden</span>`;
     return `<tr class="${T.testSel === t.key ? "sel" : ""}">
-      <td><b>${esc(t.title)}</b><br><small class="muted">Unit ${u ? unitNum(u) : esc(t.unitId)}</small></td>
+      <td><b>${esc(t.title)}</b><br><small class="muted">${u ? esc(uLabel(u)) : esc(t.unitId)}</small></td>
       <td class="num">${t.minutes} min</td>
       <td>${status}</td>
       <td class="row">

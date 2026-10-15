@@ -184,7 +184,12 @@ function exerciseBlocks(ex, num, keys, teacher) {
     const html = ex.inline.replace(/\{\{([\w-]+)\}\}/g, (m, id) => (ex.inlineNums === false ? GAP : `<b class="gn">${id}</b> ${GAP}`));
     out.push(...htmlBlocks(html));
     const withChoices = items.filter((it) => it.choices);
-    if (withChoices.length) {
+    const sets = [...new Set(withChoices.map((it) => it.choices.join("  /  ")))];
+    if (sets.length && (ex.inlineNums === false || sets.length < withChoices.length)) {
+      // the same lists for many gaps (articles, the answer template): print each list once
+      out.push(para([new TextRun({ text: sets.length === 1 ? "Choose from:" : "Choose from these lists:", bold: true })], { after: 40 }));
+      for (const t of sets) out.push(para([new TextRun({ text: t })], { indent: { left: 360 }, after: 40 }));
+    } else if (withChoices.length) {
       out.push(para([new TextRun({ text: "Choose:", bold: true })], { after: 40 }));
       for (const it of withChoices) out.push(para([new TextRun({ text: `${it.id}  `, bold: true, color: COLORS.gold }), new TextRun({ text: it.choices.join("  /  ") })], { indent: { left: 360 }, after: 40 }));
     }
@@ -205,6 +210,7 @@ function exerciseBlocks(ex, num, keys, teacher) {
         (it.options || []).forEach((t, j) => out.push(para([new TextRun({ text: `${"ABCDEFGH"[j]}   `, bold: true, color: COLORS.gold }), ...inlineRuns(parse(t))], { indent: { left: 720 }, after: 30 })));
       } else if (ex.kind === "open") {
         out.push(para([new TextRun({ text: n, bold: true }), ...inlineRuns(parse(it.text))], { indent: { left: 360, hanging: 300 }, after: 40 }));
+        if (it.zh) out.push(para([new TextRun({ text: "中文: " + it.zh, color: COLORS.mut })], { indent: { left: 360 }, after: 40 }));
         const rows = Math.min(Math.max(it.rows || ex.rows || 3, 2), 10);
         for (let r = 0; r < rows; r++) out.push(para([new TextRun({ text: "_".repeat(78), color: "B0B7C3" })], { indent: { left: 360 }, after: 60 }));
         const mw = it.minWords || ex.minWords;
@@ -269,10 +275,10 @@ function mediaBlocks(b) {
 }
 
 // ---------------------------------------------------------------- whole unit
-export async function exportUnitDocx({ courseTitle, unitNum, unitTitle, sections, keys = {}, notes = {}, teacher = false }) {
+export async function exportUnitDocx({ courseTitle, unitNum, unitLabel = "", unitTitle, sections, keys = {}, notes = {}, teacher = false }) {
   const body = [];
   body.push(para([new TextRun({ text: courseTitle, bold: true, color: COLORS.gold, size: 22, allCaps: true })], { after: 60 }));
-  body.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: `Unit ${unitNum} · ${unitTitle}` })], spacing: { after: 80 } }));
+  body.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: `${unitLabel || "Unit " + unitNum} · ${unitTitle}` })], spacing: { after: 80 } }));
   body.push(para([new TextRun({ text: teacher ? "Teacher's Book · with keys, model answers and teaching notes" : "Student's Book", italics: true, color: teacher ? COLORS.plum : COLORS.mut, size: 24 })], { after: 240 }));
 
   sections.forEach((sec, si) => {
@@ -292,7 +298,7 @@ export async function exportUnitDocx({ courseTitle, unitNum, unitTitle, sections
   });
 
   const doc = new Document({
-    creator: courseTitle, title: `${courseTitle} – Unit ${unitNum}`,
+    creator: courseTitle, title: `${courseTitle} – ${unitLabel || "Unit " + unitNum}`,
     styles: {
       default: { document: { run: { font: "Calibri", size: 22 } } },
       paragraphStyles: [

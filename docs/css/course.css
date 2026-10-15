@@ -520,3 +520,49 @@ ol.items select.gap{margin:0 3px}
 .spk-meter{flex:0 1 220px;height:8px;border-radius:5px;background:var(--line);overflow:hidden}
 .spk-meter i{display:block;height:100%;width:0;background:var(--teal);transition:width .1s linear}
 .spk-quiet{font-weight:600;color:var(--warn)}
+
+/* ---------------- weekly course: sidebar groups, week labels ---------------- */
+.sb-label.sb-series{margin-top:14px}
+.sb-uh .u-l{display:block;font-family:var(--sans);font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--sb-accent);margin-bottom:1px}
+.sb-uh .u-n{width:auto;min-width:30px;padding:2px 5px}
+
+/* ---------------- Russian / Chinese switch for translation sentences ---------------- */
+.lang-sw{display:inline-flex;border:1px solid var(--line);border-radius:16px;overflow:hidden;flex:none;background:#fff}
+.lang-sw button{font:inherit;font-size:12.5px;font-weight:700;border:none;background:transparent;color:var(--navy);padding:4px 11px;cursor:pointer}
+body:not(.lang-zh) .lang-sw button[data-lang="ru"],body.lang-zh .lang-sw button[data-lang="zh"]{background:var(--navy);color:#fff}
+body.teacher:not(.lang-zh) .lang-sw button[data-lang="ru"],body.teacher.lang-zh .lang-sw button[data-lang="zh"]{background:var(--plum)}
+.src-zh{display:none;font-size:16.5px;line-height:1.7}
+body.lang-zh .src-zh{display:inline}
+body.lang-zh .src-ru{display:none}
+
+/* ---------------- explanations in Chinese (opened on demand) ---------------- */
+details.zh-note{margin:-12px 0 22px;border:1px dashed #c9d6e6;border-radius:0 0 var(--r2) var(--r2);background:#fbfcfe;padding:0 16px}
+details.zh-note summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--navy3);padding:9px 0;list-style:none}
+details.zh-note summary::-webkit-details-marker{display:none}
+details.zh-note summary::before{content:"+ ";font-family:var(--mono)}
+details.zh-note[open] summary::before{content:"– "}
+details.zh-note .zh-b{font-size:15.5px;line-height:1.85;color:var(--ink2);padding-bottom:12px}
+details.zh-note .zh-b p{margin:0 0 8px}
+details.zh-note .zh-b ul{margin:0 0 8px;padding-left:20px}
+details.zh-note .zh-b i{font-style:italic;color:var(--navy)}
+
+/* ---------------- grammar analysis: sentence + answer template ---------------- */
+.inline-text ol.an-list{padding-left:26px;margin:0}
+.an-list>li{margin:0 0 20px}
+.an-list .src{font-family:var(--serif);font-size:16.5px;line-height:1.6;margin:0 0 7px;color:#242c3c}
+.an-list .tpl{margin:0 0 6px;padding:8px 12px;background:#f7f9fc;border:1px solid #e2e9f2;border-radius:8px;font-size:14.8px;line-height:2.1}
+.an-list .tpl b{font-family:var(--serif);color:var(--navy)}
+.an-list .tpl .use{display:inline-block;margin-left:4px;font-weight:700;color:var(--gold)}
+.an-list .src .gap{margin:0 2px}
+.art-text{font-family:var(--serif);font-size:16.5px;line-height:2.15}
+.art-text select.gap{font-family:var(--serif);font-size:15px;padding:1px 4px;margin:0 2px}
+.art-text p{margin:0 0 12px}
+.art-text ol.items>li{margin-bottom:8px}
+.tpl-box{border:1px solid #e3d3a8;background:var(--gold3);border-radius:var(--r2);padding:12px 16px;margin:16px 0;font-size:15px}
+.tpl-box .tpl-h{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.algo{counter-reset:st;list-style:none;padding:0;margin:8px 0}
+.algo>li{counter-increment:st;position:relative;padding:6px 0 6px 40px}
+.algo>li::before{content:counter(st);position:absolute;left:0;top:5px;width:27px;height:27px;border-radius:50%;background:var(--navy);color:#fff;font:700 13px var(--mono);display:grid;place-items:center}
+.an-list .src .use select.gap,.an-list .tpl .use+select.gap{font-size:13px}
+.an-list .src .use select.gap{border-color:#e3d3a8;background:var(--gold3);max-width:11em}
+.art-text select.gap{min-width:3.6em}

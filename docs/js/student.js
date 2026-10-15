@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261015g1";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261015g1";
+} from "./fb.js?v=20261015g3";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261015g3";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
-  isTeacherChecked, wireFlashcards, countWords,
-} from "./common.js?v=20261015g1";
-import "./speaking.js?v=20261015g1";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g1";
-import { feedbackHTML } from "./writing.js?v=20261015g1";
+  isTeacherChecked, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
+} from "./common.js?v=20261015g3";
+import "./speaking.js?v=20261015g3";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g3";
+import { feedbackHTML } from "./writing.js?v=20261015g3";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -34,6 +34,7 @@ document.title = COURSE_TITLE;
 document.querySelectorAll("[data-course-title]").forEach((el) => (el.textContent = COURSE_TITLE));
 initShell();
 wireFlashcards();
+wireLang();
 protectBook();
 wireUnitNav(document.querySelector("#unit-nav"), () => renderNav());
 
@@ -206,7 +207,8 @@ function renderNav() {
 
 // ------------------------------------------------------------------ main
 function setCrumb(html) { $("#crumb").innerHTML = html; }
-const unitNum = (u) => u.order || S.units.indexOf(u) + 1;
+const unitNum = (u) => unitNo(u, S.units.indexOf(u));
+const uLabel = (u) => unitLabel(u, S.units.indexOf(u));
 
 function renderMain() {
   if (!S.user || !S.group) return;
@@ -222,31 +224,31 @@ function renderMain() {
     $("#unit-bar").innerHTML = "";
     content.dataset.view = "";
     content.innerHTML = `<header class="page-h"><div class="pe">Welcome</div><h2>Hello${S.profile ? ", " + esc(S.profile.name) : ""}!</h2>
-      <p class="pl">${open.length ? "Choose a unit to start working." : "No units are open yet. They will appear here automatically as soon as your teacher opens them."}</p></header>
+      <p class="pl">${open.length ? "Choose a week to start working." : "No units are open yet. They will appear here automatically as soon as your teacher opens them."}</p></header>
       ${visibleTests().filter(([, t]) => t.open).map(([key, t]) => `<div class="ub ub-res"><span><b>Test: ${esc(t.title)}</b> · ${t.minutes} minutes</span><a class="btn primary" href="#test/${esc(key)}">Go to the test</a></div>`).join("")}
-      ${open.length ? `<div class="cards">${open.map((u) => `<a class="pg" href="#${esc(u.id)}"><span class="d">Unit ${unitNum(u)}</span><span class="t">${esc(u.title)}</span></a>`).join("")}</div>` : ""}`;
+      ${open.length ? `<div class="cards">${open.map((u) => `<a class="pg" href="#${esc(u.id)}"><span class="d">${esc(uLabel(u))}</span><span class="t">${esc(u.title)}</span></a>`).join("")}</div>` : ""}`;
     return;
   }
-  document.title = `Unit ${unitNum(unit)} · ${unit.title}`;
-  setCrumb(`<b>Unit ${unitNum(unit)}</b> &middot; ${esc(unit.title)}`);
+  document.title = `${uLabel(unit)} · ${unit.title}`;
+  setCrumb(`<b>${esc(uLabel(unit))}</b> &middot; ${esc(unit.title)}`);
   if (!isOpen(unit.id) || unit.status === "soon") {
     $("#unit-bar").innerHTML = "";
     content.dataset.view = "";
-    content.innerHTML = `<header class="page-h"><div class="pe">Unit ${unitNum(unit)}</div><h2>${esc(unit.title)}</h2></header>
+    content.innerHTML = `<header class="page-h"><div class="pe">${esc(uLabel(unit))}</div><h2>${esc(unit.title)}</h2></header>
       <div class="locked-msg"><span class="big">🔒</span>${unit.status === "soon"
-        ? "This unit is still being prepared."
-        : "This unit is not open yet. It will open automatically when your teacher gives your group access."}</div>`;
+        ? `${esc(uLabel(unit))} is still being prepared.`
+        : `${esc(uLabel(unit))} is not open yet. It will open automatically when your teacher gives your group access.`}</div>`;
     return;
   }
   ensureUnit(unit.id);
   const c = S.content[unit.id], sub = S.sub[unit.id];
   if (c === undefined || !sub) { content.innerHTML = `<p class="muted">Loading…</p>`; return; }
-  if (c === null) { content.innerHTML = `<div class="locked-msg">You do not have access to this unit.</div>`; return; }
+  if (c === null) { content.innerHTML = `<div class="locked-msg">You do not have access to ${esc(uLabel(unit))}.</div>`; return; }
 
   const sec = c.sections.find((s) => s.id === r.section) || c.sections[0];
   const secIdx = c.sections.indexOf(sec) + 1;
   const meta = (unit.sections || []).find((s) => s.id === sec.id) || {};
-  setCrumb(`<b>Unit ${unitNum(unit)}</b> &middot; ${unitNum(unit)}.${secIdx} ${esc(sec.title)}`);
+  setCrumb(`<b>${esc(uLabel(unit))}</b> &middot; ${unitNum(unit)}.${secIdx} ${esc(sec.title)}`);
   const released = isReleased(unit.id);
   const res = released ? S.result[unit.id] : undefined;
   const readOnly = released || sub.status === "submitted";
@@ -261,7 +263,7 @@ function renderMain() {
   }
   content.dataset.view = viewKey;
   content.dataset.unit = unit.id;
-  content.innerHTML = `<header class="page-h"><div class="pe">Unit ${unitNum(unit)} &middot; ${unitNum(unit)}.${secIdx}</div>
+  content.innerHTML = `<header class="page-h"><div class="pe">${esc(uLabel(unit))} &middot; ${unitNum(unit)}.${secIdx}</div>
       <h2>${esc(sec.title)}</h2>${meta.subtitle || sec.subtitle ? `<p class="pl">${esc(meta.subtitle || sec.subtitle)}</p>` : ""}</header>`
     + renderBlocks(sec.blocks, (ex) => {
       const exDone = relEx.includes(ex.id);   // the teacher has checked this exercise
@@ -298,15 +300,15 @@ function renderUnitBar(unit, sub, released, res) {
     html = res
       ? `<div class="ub ub-res"><b>Your result: ${res.score} / ${res.max}</b>
          <span>Auto-checked tasks ${res.autoScore}/${res.autoMax}${res.manualMax ? ` · open answers ${res.manualPending ? "being assessed" : res.manualScore + "/" + res.manualMax}` : ""}</span></div>`
-      : `<div class="ub">Results are available, but your work for this unit was not submitted.</div>`;
+      : `<div class="ub">Results are available, but your work for ${esc(uLabel(unit))} was not submitted.</div>`;
   } else if (sub.status === "submitted") {
     html = `<div class="ub ub-sub">✓ Submitted ${fmtTime(sub.submittedAt)}. Your teacher will release the results.</div>`;
   } else {
     const ret = sub.returnedAt && sub.status === "draft"
       ? `<div class="ub ub-ret"><b>Your teacher has returned this work for revision${sub.returnedAt?.toDate ? ` (${fmtTime(sub.returnedAt)})` : ""}.</b>
-         ${sub.returnNote ? `<span class="ret-note">${esc(sub.returnNote)}</span>` : ""}<span class="muted">Make your changes and submit the unit again.</span></div>` : "";
+         ${sub.returnNote ? `<span class="ret-note">${esc(sub.returnNote)}</span>` : ""}<span class="muted">Make your changes and submit ${esc(uLabel(unit))} again.</span></div>` : "";
     html = ret + `<div class="ub"><span id="save-state" class="muted">${sub.dirty ? "Unsaved changes…" : sub.updatedAt ? "Draft saved " + fmtTime(sub.updatedAt) : "Your answers are saved automatically"}</span>
-      <button class="btn primary" id="submit-unit">Submit this unit</button></div>`;
+      <button class="btn primary" id="submit-unit">Submit ${esc(uLabel(unit))}</button></div>`;
   }
   bar.innerHTML = html;
   $("#submit-unit")?.addEventListener("click", () => submitUnit(unit.id));

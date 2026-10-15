@@ -60,6 +60,11 @@ const NOAUTO = `autocomplete="off" autocorrect="off" autocapitalize="off" spellc
 
 export const subId = (unitId, uid) => `${unitId}__${uid}`;
 
+// Units of a weekly course: "label" is the name shown ("Week 6 HA"), "num" the prefix of
+// section and exercise numbers ("H6"), "series" the sidebar group ("Home Assignments").
+export const unitNo = (u, i = 0) => (u?.num ?? u?.order ?? i + 1);
+export const unitLabel = (u, i = 0) => (u?.label || `Unit ${unitNo(u, i)}`);
+
 export function exercisesOf(content) {
   const out = [];
   for (const s of content?.sections || [])
@@ -205,7 +210,7 @@ export function renderExercise(ex, o = {}) {
       const size = it.size || ex.size || 14;
       // "choices": the word is chosen from a dropdown list instead of being typed
       const input = it.choices
-        ? `<select class="gap ${mark}" ${attrs}><option value="">choose…</option>${it.choices.map((c) => `<option value="${esc(c)}" ${val === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`
+        ? `<select class="gap ${mark}" ${attrs}><option value="">${esc(ex.ph || "choose…")}</option>${it.choices.map((c) => `<option value="${esc(c)}" ${val === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`
         : `<input class="gap ${ex.box ? "box" : ""} ${mark}" ${attrs} value="${esc(val)}" size="${size}" ${ex.box ? `style="width:${size + 1}ch"` : ""} ${NOAUTO}>`;
       if (ex.inline) { inlineCtl[it.id] = `${ex.inlineNums === false ? "" : `<span class="gn">${esc(it.id)}</span>`}${input}${corr}${keyHint}`; return ""; }
       body = (it.text || "").includes("___") ? it.text.replace("___", input) : `<span class="li-t">${it.text || ""}</span>${input}`;
@@ -240,7 +245,8 @@ export function renderExercise(ex, o = {}) {
       const minW = it.minWords || ex.minWords;
       const wc = minW ? `<div class="wc"><span class="wc-n" data-wc="${esc(ex.id)}:${esc(it.id)}">${countWords(val)}</span> words <span class="muted">· at least ${minW}</span></div>` : "";
       const model = o.key && o.key[it.id] ? `<div class="keyhint model"><b>Model answer:</b> ${esc(keyText(o.key[it.id]))}</div>` : "";
-      body = `${it.text}${model}<textarea class="open-answer" rows="${it.rows || 5}" ${attrs} ${NOAUTO} placeholder="${o.readOnly ? "" : "Type your answer here…"}">${esc(val)}</textarea>${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
+      const src = it.zh ? `<span class="src-ru">${it.text}</span><span class="src-zh" lang="zh-Hans">${esc(it.zh)}</span>` : it.text;
+      body = `${src}${model}<textarea class="open-answer" rows="${it.rows || 5}" ${attrs} ${NOAUTO} placeholder="${o.readOnly ? "" : "Type your answer here…"}">${esc(val)}</textarea>${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
     }
     return `<li${play ? ' class="has-play"' : ""}>${play}${play ? `<div class="li-body">${body}</div>` : body}</li>`;
   }).join("\n");
@@ -263,8 +269,11 @@ export function renderExercise(ex, o = {}) {
     body = `<div class="match"><ol class="m-left">${left}</ol><ol class="m-right" type="a">${right}</ol></div>`;
   }
   const tag = o.tag ? `<span class="ex-tag">${o.tag}</span>` : "";
+  // sentences to translate in Russian or in Chinese: the student chooses the language
+  const hasZh = (ex.items || []).some((it) => it.zh);
+  const langSw = hasZh ? `<span class="lang-sw" role="group" aria-label="Language of the sentences"><button type="button" data-lang="ru">Русский</button><button type="button" data-lang="zh" lang="zh-Hans">中文</button></span>` : "";
   return `${o.before || ""}<section class="ex" id="ex-${esc(ex.id)}">
-  <div class="ex-h">${o.num ? `<span class="ex-n">${esc(o.num)}</span>` : ""}<span class="ex-t">${esc(ex.title || "")}</span>${tag}${scoreLine}</div>
+  <div class="ex-h">${o.num ? `<span class="ex-n">${esc(o.num)}</span>` : ""}<span class="ex-t">${esc(ex.title || "")}</span>${langSw}${tag}${scoreLine}</div>
   ${ex.rubric ? `<p class="ex-i">${ex.rubric}</p>` : ""}
   ${ex.display === "letters" ? "" : options}
   ${body}
@@ -499,3 +508,23 @@ if (typeof document !== "undefined") document.addEventListener("click", (e) => {
   curAudio.onerror = () => { b.classList.remove("on"); b.classList.add("missing"); b.title = "This recording has not been added yet"; };
   curAudio.play().then(() => { if (once) markPlayed(src); }).catch(() => {});
 });
+
+// ---------------------------------------------------------------------
+//  Russian / Chinese switch for translation sentences (and Chinese rule notes)
+// ---------------------------------------------------------------------
+const LANG_KEY = "srcLang";
+const applyLang = (l) => document.body.classList.toggle("lang-zh", l === "zh");
+let langWired = false;
+export function wireLang() {
+  let l = "ru";
+  try { l = localStorage.getItem(LANG_KEY) || "ru"; } catch {}
+  applyLang(l);
+  if (langWired) return;
+  langWired = true;
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".lang-sw button");
+    if (!b) return;
+    try { localStorage.setItem(LANG_KEY, b.dataset.lang); } catch {}
+    applyLang(b.dataset.lang);
+  });
+}
