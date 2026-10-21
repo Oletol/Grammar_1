@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-} from "./fb.js?v=20261021c";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261021c";
+} from "./fb.js?v=20261021d";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021d";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261021c";
-import "./speaking.js?v=20261021c";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021c";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021c";
+} from "./common.js?v=20261021d";
+import "./speaking.js?v=20261021d";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021d";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021d";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -251,7 +251,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021c");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021d");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -683,6 +683,7 @@ function stripExercise(b, seen, where) {
     }
     if (b.kind !== "open" && b.graded !== false) {
       if (answer === undefined || answer === "") throw new Error(`Exercise ${b.id}, item ${it.id}: no answer`);
+      if (Array.isArray(answer) && answer.some(Array.isArray)) throw new Error(`Exercise ${b.id}, item ${it.id}: the key has a list inside a list (the database cannot store it)`);
       keys[rest.id] = answer;
     }
     else if (b.kind === "open" && answer) keys[rest.id] = answer;   // model answer, teacher only

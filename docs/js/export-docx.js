@@ -4,7 +4,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle,
   ShadingType, ExternalHyperlink, AlignmentType, PageBreak,
 } from "./vendor/docx.mjs";
-import { keyText, exNum } from "./common.js?v=20261021c";
+import { keyText, exNum } from "./common.js?v=20261021d";
 
 const GAP = "__________";
 const COLORS = { navy: "16233F", gold: "C08A2E", plum: "7B3F6B", teal: "1F7A72", mut: "6C7487", rule: "EEF4FB", disc: "E9F6F4", tnote: "F6EDF4", key: "FDF6E7" };

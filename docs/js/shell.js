@@ -1,6 +1,6 @@
 // Page shell shared by the student and teacher pages:
 // collapsible sidebar (desktop: slides away; mobile: drawer) and the unit accordion.
-import { esc } from "./common.js?v=20261021c";
+import { esc } from "./common.js?v=20261021d";
 
 const LS_KEY = "sbCollapsed";
 

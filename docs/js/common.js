@@ -82,10 +82,11 @@ export function keyText(key) {
 }
 
 // "multi" exercises: the student gives every possible variant, e.g. "would take / used to take".
-// The key is a list of parts; each part is a string or a list of accepted spellings; "?part" = may be added, not required.
+// The key is a list of parts; "a ~ b" = accepted spellings of one part; "?part" = may be added, not required.
+// (No lists inside lists: Firestore does not store nested arrays.)
 const MULTI_SPLIT = /\s*(?:\/|;|,|\||\bor\b)\s*/;
 const partsOf = (key) => (Array.isArray(key) ? key : [key]).map((p) => {
-  const alts = Array.isArray(p) ? p : [p];
+  const alts = (Array.isArray(p) ? p : [p]).flatMap((a) => String(a).split(/\s+~\s+/));   // "a ~ b": two spellings of one variant
   const opt = alts.some((a) => String(a).startsWith("?"));
   return { opt, alts: alts.map((a) => String(a).replace(/^\?/, "")) };
 });
