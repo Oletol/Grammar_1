@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-} from "./fb.js?v=20261021d";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261021d";
+} from "./fb.js?v=20261021e";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021e";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
-  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261021d";
-import "./speaking.js?v=20261021d";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021d";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021d";
+  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
+} from "./common.js?v=20261021e";
+import "./speaking.js?v=20261021e";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021e";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021e";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -191,7 +191,7 @@ function render(force = false) {
   renderNav();
   // do not re-render while the teacher is typing a mark, comment or JSON
   const a = document.activeElement;
-  if (!force && a && $("#view").contains(a) && a.matches(".g-score,.g-comment,textarea.json,input[type=text],input:not([type])")) return;
+  if (!force && a && $("#view").contains(a) && a.matches(".g-score,.g-comment,textarea.json,textarea.open-answer,input[type=text],input:not([type])")) return;
   const r = route();
   if (r.unit && r.unit !== T.unitId && T.units.some((u) => u.id === r.unit)) { setUnit(r.unit); return; }
   $("#wrap").classList.toggle("wide", !!r.tool && r.tool !== "content");
@@ -227,7 +227,7 @@ function viewUnit(r) {
   const prev = secs[i - 1], next = secs[i + 1];
   return bar + docxBar(u) + pageHead(`${esc(uLabel(u))}${meta.group ? ` &middot; ${esc(meta.group)}` : ""} &middot; ${n}.${i + 1}`, esc(sec.title), esc(meta.subtitle || sec.subtitle || ""))
     + renderBlocks(blocks, (ex) => ({
-      key: d.keys[ex.id] || {}, readOnly: true,
+      key: d.keys[ex.id] || {}, readOnly: false, answers: T.demo[ex.id] || {},
       tag: ex.check === "teacher" ? (isManual(ex) ? "Writing check by the teacher" : "Checked by the teacher") : "",
       before: ex.check === "teacher" && g ? (isManual(ex) ? writingBar(u, ex, g) : exerciseBar(u, ex, g)) : "",
     }), `${n}.${i + 1}`)
@@ -251,7 +251,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021d");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021e");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -384,7 +384,18 @@ function viewAccess() {
   <table class="t"><tr><th>#</th><th>Unit</th><th>Access for the group</th><th>Results</th></tr>${rows}</table>`;
 }
 
+// the teacher can try the exercises in the preview (as in class); the answers stay on this page only
+T.demo = {};
+const keepDemo = (e) => {
+  const el = e.target;
+  if (!el.dataset?.ex || !el.dataset?.item || el.disabled || el.closest("#detail") || !route().unit) return;
+  const v = readInput(el);
+  if (v === null) return;
+  (T.demo[el.dataset.ex] ??= {})[el.dataset.item] = v;
+};
+document.addEventListener("input", keepDemo);
 document.addEventListener("change", (e) => {
+  keepDemo(e);
   if (e.target.id === "show-correct") { T.showCorrect = e.target.checked; ls.set("showCorrect", T.showCorrect ? "1" : "0"); }
   if (e.target.id === "inc-drafts") { T.includeDrafts = e.target.checked; render(true); }
   if (e.target.id === "g-filter") { T.groupFilter = e.target.value; render(true); }
@@ -525,6 +536,7 @@ function studentDetail(uid, data) {
     if (!exs.length) return "";
     return `<h3>${n}.${i + 1} ${esc(sec.title)}</h3>` + exs.map((ex, j) => renderExercise(ex, {
       num: exNum(ex, `${n}.${i + 1}.${j + 1}`),
+      tag: sub.answers?._done?.[ex.id] ? "Marked done" : "Not marked done",
       answers: sub.answers?.[ex.id] || {},
       readOnly: true,
       auto: isAuto(ex) || hasPick(ex) ? auto.items[ex.id] : undefined,

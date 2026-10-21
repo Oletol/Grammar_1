@@ -316,6 +316,7 @@ export function renderExercise(ex, o = {}) {
   ${ex.rubric ? `<p class="ex-i">${ex.rubric}</p>` : ""}
   ${ex.display === "letters" ? "" : options}
   ${body}
+  ${o.after || ""}
 </section>`;
 }
 

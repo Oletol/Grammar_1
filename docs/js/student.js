@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261021d";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261021d";
+} from "./fb.js?v=20261021e";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021e";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261021d";
-import "./speaking.js?v=20261021d";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021d";
-import { feedbackHTML } from "./writing.js?v=20261021d";
+} from "./common.js?v=20261021e";
+import "./speaking.js?v=20261021e";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021e";
+import { feedbackHTML } from "./writing.js?v=20261021e";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -253,7 +253,8 @@ function renderMain() {
   const res = released ? S.result[unit.id] : undefined;
   const readOnly = released || sub.status === "submitted";
   const relEx = S.group.releasedEx?.[unit.id] || [];
-  const viewKey = `${unit.id}/${sec.id}/${readOnly}/${!!res}/${relEx.join(",")}/${(S.group.feedbackEx?.[unit.id] || []).join(",")}/${S.exrVer}`;
+  const doneMap = sub.answers?._done || {};
+  const viewKey = `${unit.id}/${sec.id}/${readOnly}/${!!res}/${relEx.join(",")}/${(S.group.feedbackEx?.[unit.id] || []).join(",")}/${S.exrVer}/${Object.keys(doneMap).filter((k) => doneMap[k]).join(",")}`;
 
   // do not re-render while the student is typing (keeps the cursor in place)
   const active = document.activeElement;
@@ -270,10 +271,15 @@ function renderMain() {
       const fbOn = (S.group.feedbackEx?.[unit.id] || []).includes(ex.id);
       const fb = fbOn && !res ? S.exr[unit.id]?.feedback?.[ex.id] : null;
       const fbAt = S.exr[unit.id]?.feedbackAt?.[ex.id];
+      const marked = !!doneMap[ex.id];          // the student has marked the exercise as done
+      const doneBar = readOnly || exDone ? "" : marked
+        ? `<div class="done-bar is-done"><span class="done-ok">✓ Done</span><span class="muted">You can still change your answers before you submit the week.</span><button class="btn small" type="button" data-done="${esc(ex.id)}" data-v="0">Edit</button></div>`
+        : `<div class="done-bar"><span class="muted">Finished this exercise?</span><button class="btn small good" type="button" data-done="${esc(ex.id)}" data-v="1">Mark as done</button></div>`;
       return {
         itemExtra: fb ? (itemId) => feedbackHTML(fb[itemId], { checkedAt: fmtTime(fbAt) }) : null,
         answers: sub.answers?.[ex.id] || {},
-        readOnly: readOnly || exDone,
+        readOnly: readOnly || exDone || marked,
+        after: doneBar,
         auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : undefined,
         manual: res?.manual?.[ex.id],
         showPending: !!res,
@@ -313,6 +319,22 @@ function renderUnitBar(unit, sub, released, res) {
   bar.innerHTML = html;
   $("#submit-unit")?.addEventListener("click", () => submitUnit(unit.id));
 }
+
+// ------------------------------------------------------------------ "Mark as done" for each exercise
+// the marks are kept in answers._done (not an exercise id, so it can change after the teacher has checked an exercise)
+$("#content").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-done]");
+  if (!b) return;
+  const unitId = $("#content").dataset.unit, sub = S.sub[unitId];
+  if (!sub || sub.status === "submitted") return;
+  sub.answers ??= {};
+  sub.answers._done = { ...(sub.answers._done || {}), [b.dataset.done]: b.dataset.v === "1" };
+  sub.dirty = true;
+  writeLocal(unitId, sub.answers);
+  scheduleSave(unitId);
+  renderMain();
+});
+const doneEx = (sub, ex, unitId) => !!sub.answers?._done?.[ex.id] || (S.group.releasedEx?.[unitId] || []).includes(ex.id);
 
 // ------------------------------------------------------------------ answers & autosave
 $("#content").addEventListener("input", onAnswer);
@@ -381,6 +403,16 @@ window.addEventListener("pagehide", () => flushSave());
 
 async function submitUnit(unitId) {
   const c = S.content[unitId], sub = S.sub[unitId];
+  // every exercise except the supplementary ones must be marked as done first
+  const unit = S.units.find((u) => u.id === unitId) || {};
+  const grp = (sid) => (unit.sections || []).find((x) => x.id === sid)?.group || "";
+  const num = (ex) => { const si = c.sections.findIndex((x) => x.id === ex.sectionId); const sec = c.sections[si]; const k = sec.blocks.filter((b) => b.type === "exercise").findIndex((b) => b.id === ex.id); return ex.no ? `Exercise ${ex.no}` : `${unitNum(unit)}.${si + 1}.${k + 1}`; };
+  const missing = exercisesOf(c).filter((ex) => !/supplementary/i.test(grp(ex.sectionId)) && !doneEx(sub, ex, unitId));
+  if (missing.length) {
+    alert(`You cannot submit ${uLabel(unit)} yet. Mark these exercises as done first (the button under each exercise):\n\n`
+      + missing.map((ex) => `• ${num(ex)} · ${ex.title || ""} (${ex.sectionTitle})`).join("\n"));
+    return;
+  }
   const total = exercisesOf(c).reduce((n, ex) => n + (ex.items || []).length, 0);
   const filled = exercisesOf(c).reduce((n, ex) => n + (ex.items || []).filter((it) => String(sub.answers?.[ex.id]?.[it.id] ?? "").trim()).length, 0);
   if (!confirm(`Submit your work? You have answered ${filled} of ${total} items.\nYou will not be able to change your answers after submitting.`)) return;
