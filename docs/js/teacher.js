@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-} from "./fb.js?v=20261021a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261021a";
+} from "./fb.js?v=20261021c";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021c";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
-  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261021a";
-import "./speaking.js?v=20261021a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021a";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021a";
+  fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
+} from "./common.js?v=20261021c";
+import "./speaking.js?v=20261021c";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021c";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021c";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -251,7 +251,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021a");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021c");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -524,10 +524,10 @@ function studentDetail(uid, data) {
     const exs = (sec.blocks || []).filter((b) => b.type === "exercise");
     if (!exs.length) return "";
     return `<h3>${n}.${i + 1} ${esc(sec.title)}</h3>` + exs.map((ex, j) => renderExercise(ex, {
-      num: `${n}.${i + 1}.${j + 1}`,
+      num: exNum(ex, `${n}.${i + 1}.${j + 1}`),
       answers: sub.answers?.[ex.id] || {},
       readOnly: true,
-      auto: isAuto(ex) ? auto.items[ex.id] : undefined,
+      auto: isAuto(ex) || hasPick(ex) ? auto.items[ex.id] : undefined,
       manual: r?.manual?.[ex.id],
       grading: isManual(ex),
       itemExtra: T.exr?.[uid]?.feedback?.[ex.id] ? (itemId) => feedbackHTML(T.exr[uid].feedback[ex.id][itemId], { checkedAt: fmtTime(T.exr[uid].feedbackAt?.[ex.id]) }) : null,
@@ -674,9 +674,13 @@ function stripExercise(b, seen, where) {
   if (!KIND_LABEL[b.kind]) throw new Error(`Exercise ${b.id}: unknown kind “${b.kind}” (gap | match | mcq | open)`);
   const keys = {};
   const items = (b.items || []).map((it) => {
-    const { answer, ...rest } = it;
+    const { answer, pickAnswer, ...rest } = it;
     if (it.id === undefined) throw new Error(`Exercise ${b.id}: an item has no id`);
     rest.id = String(it.id);
+    if (b.kind === "open" && it.choices) {
+      if (!pickAnswer) throw new Error(`Exercise ${b.id}, item ${it.id}: the dropdown has no answer (pickAnswer)`);
+      keys[rest.id + "-type"] = pickAnswer;
+    }
     if (b.kind !== "open" && b.graded !== false) {
       if (answer === undefined || answer === "") throw new Error(`Exercise ${b.id}, item ${it.id}: no answer`);
       keys[rest.id] = answer;

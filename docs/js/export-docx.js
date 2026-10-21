@@ -4,6 +4,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle,
   ShadingType, ExternalHyperlink, AlignmentType, PageBreak,
 } from "./vendor/docx.mjs";
+import { keyText, exNum } from "./common.js?v=20261021c";
 
 const GAP = "__________";
 const COLORS = { navy: "16233F", gold: "C08A2E", plum: "7B3F6B", teal: "1F7A72", mut: "6C7487", rule: "EEF4FB", disc: "E9F6F4", tnote: "F6EDF4", key: "FDF6E7" };
@@ -155,7 +156,7 @@ function tableOf(t) {
 }
 
 // ---------------------------------------------------------------- exercises
-const keyStr = (k) => (Array.isArray(k) ? k.join(" / ") : String(k ?? ""));
+const keyStr = (k) => keyText(k);
 const longChoices = (it) => (it.choices || []).some((c) => c.length > 28);
 
 function textWithGap(html) {
@@ -211,6 +212,7 @@ function exerciseBlocks(ex, num, keys, teacher) {
       } else if (ex.kind === "open") {
         out.push(para([new TextRun({ text: n, bold: true }), ...inlineRuns(parse(it.text))], { indent: { left: 360, hanging: 300 }, after: 40 }));
         if (it.zh) out.push(para([new TextRun({ text: "中文: " + it.zh, color: COLORS.mut })], { indent: { left: 360 }, after: 40 }));
+        if (it.choices) out.push(para([new TextRun({ text: `${it.pickLabel || ex.pickLabel || "Type"}: `, bold: true }), new TextRun({ text: it.choices.join("  /  "), color: COLORS.mut })], { indent: { left: 360 }, after: 40 }));
         const rows = Math.min(Math.max(it.rows || ex.rows || 3, 2), 10);
         for (let r = 0; r < rows; r++) out.push(para([new TextRun({ text: "_".repeat(78), color: "B0B7C3" })], { indent: { left: 360 }, after: 60 }));
         const mw = it.minWords || ex.minWords;
@@ -224,7 +226,7 @@ function exerciseBlocks(ex, num, keys, teacher) {
     if (keyed.length) {
       const kids = [];
       if (ex.kind === "open") {
-        keyed.forEach((it) => kids.push(para([new TextRun({ text: `${ex.inline ? it.id : items.indexOf(it) + 1}. `, bold: true }), new TextRun({ text: keyStr(k[it.id]) })], { after: 60 })));
+        keyed.forEach((it) => kids.push(para([new TextRun({ text: `${ex.inline ? it.id : items.indexOf(it) + 1}. `, bold: true }), new TextRun({ text: keyStr(k[it.id]) + (k[it.id + "-type"] ? `  (${keyStr(k[it.id + "-type"])})` : "") })], { after: 60 })));
         out.push(...boxed(kids, COLORS.key, "Model answers", COLORS.gold));
       } else {
         const parts = keyed.map((it) => `${ex.inline ? it.id : items.indexOf(it) + 1} ${keyStr(k[it.id])}`);
@@ -294,7 +296,7 @@ export async function exportUnitDocx({ courseTitle, unitNum, unitLabel = "", uni
       if (b.type === "html") body.push(...htmlBlocks(b.html));
       else if (b.type === "teacher-note") { if (teacher) body.push(...boxed(htmlBlocks(b.html), COLORS.tnote, "Teaching notes", COLORS.plum)); }
       else if (b.type === "flashcards") { if (b.numbered) n += 1; body.push(...flashcardBlocks(b, b.numbered ? `${unitNum}.${si + 1}.${n}` : "")); }
-      else if (b.type === "exercise") { n += 1; body.push(...exerciseBlocks(b, `${unitNum}.${si + 1}.${n}`, keys[b.id], teacher)); }
+      else if (b.type === "exercise") { n += 1; body.push(...exerciseBlocks(b, exNum(b, `${unitNum}.${si + 1}.${n}`), keys[b.id], teacher)); }
       else if (["audio", "video", "image", "images", "speaking"].includes(b.type)) body.push(...mediaBlocks(b));
     }
   });

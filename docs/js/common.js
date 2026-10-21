@@ -78,14 +78,43 @@ export function itemMax(ex, item) {
 }
 
 export function keyText(key) {
-  return Array.isArray(key) ? key.join(" / ") : String(key ?? "");
+  return Array.isArray(key) ? key.map((x) => (Array.isArray(x) ? x.join(" ~ ") : String(x).replace(/^\?(.*)$/, "($1)"))).join(" / ") : String(key ?? "");
 }
+
+// "multi" exercises: the student gives every possible variant, e.g. "would take / used to take".
+// The key is a list of parts; each part is a string or a list of accepted spellings; "?part" = may be added, not required.
+const MULTI_SPLIT = /\s*(?:\/|;|,|\||\bor\b)\s*/;
+const partsOf = (key) => (Array.isArray(key) ? key : [key]).map((p) => {
+  const alts = Array.isArray(p) ? p : [p];
+  const opt = alts.some((a) => String(a).startsWith("?"));
+  return { opt, alts: alts.map((a) => String(a).replace(/^\?/, "")) };
+});
+function isCorrectMulti(given, key) {
+  const gs = String(given ?? "").split(MULTI_SPLIT).map((x) => x.trim()).filter(Boolean);
+  if (!gs.length) return false;
+  const parts = partsOf(key), hit = new Set();
+  for (const g of gs) {
+    const i = parts.findIndex((p) => p.alts.some((a) => isCorrect(g, a)));
+    if (i < 0 || hit.has(i)) return false;
+    hit.add(i);
+  }
+  return parts.every((p, i) => p.opt || hit.has(i));
+}
+// the answer shown to the student: the required parts, first spelling of each
+export const multiShow = (key) => { const ps = partsOf(key); const req = ps.filter((p) => !p.opt); return (req.length ? req : ps.slice(0, 1)).map((p) => firstKey(p.alts[0])).join(" / "); };
+export const shownKey = (ex, key) => (ex?.multi ? multiShow(key) : firstKey(key));
+// exercise number: her own number ("3", "A1", "R2") if given, otherwise the automatic one
+export const exNum = (ex, auto) => (ex?.no ? String(ex.no) : auto);
+// open items with a dropdown next to the answer (e.g. the type of a since-sentence): auto-checked part
+export const PICK = "-type";
+export const hasPick = (ex) => ex.kind === "open" && (ex.items || []).some((it) => it.choices);
 
 // the answer shown to the student after checking: the first accepted variant
 export const firstKey = (key) => expandKey(Array.isArray(key) ? key[0] ?? "" : key ?? "")[0].replace(/\s+/g, " ").trim();
 
 export function isCorrect(given, key, opts = {}) {
   if (given == null || norm(given) === "") return false;
+  if (opts.multi) return isCorrectMulti(given, key);
   const P = !!opts.punct;
   const variants = (Array.isArray(key) ? key : [key]).flatMap(expandKey);
   // "'d" can mean "had" or "would": try both, in the answer and in the key
@@ -104,13 +133,15 @@ export function gradeAuto(content, answers, keys) {
   const items = {};
   let score = 0, max = 0;
   for (const ex of exercisesOf(content)) {
-    if (!isAuto(ex)) continue;
+    if (!isAuto(ex) && !hasPick(ex)) continue;
     items[ex.id] = {};
     for (const it of ex.items || []) {
-      const given = answers?.[ex.id]?.[it.id] ?? "";
-      const key = keys?.[ex.id]?.[it.id];
-      const ok = isCorrect(given, key, { punct: ex.punct });
-      items[ex.id][it.id] = { given, ok, correct: firstKey(key) };
+      if (!isAuto(ex) && !it.choices) continue;
+      const id = isAuto(ex) ? it.id : it.id + PICK;
+      const given = answers?.[ex.id]?.[id] ?? "";
+      const key = keys?.[ex.id]?.[id];
+      const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi && isAuto(ex) });
+      items[ex.id][id] = { given, ok, correct: isAuto(ex) ? shownKey(ex, key) : firstKey(key) };
       max += 1;
       if (ok) score += 1;
     }
@@ -125,8 +156,8 @@ export function gradeExercise(ex, answers, keys) {
   for (const it of ex.items || []) {
     const given = answers?.[it.id] ?? "";
     const key = keys?.[it.id];
-    const ok = isCorrect(given, key, { punct: ex.punct });
-    items[it.id] = { given, ok, correct: firstKey(key) };
+    const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi });
+    items[it.id] = { given, ok, correct: shownKey(ex, key) };
     if (ok) score += 1;
   }
   return { items, score, max: (ex.items || []).length };
@@ -179,7 +210,7 @@ export function renderBlocks(blocks, exOpts, numPrefix = "") {
     if (b.type === "audio") return renderAudio(b);
     if (b.type === "video") return renderVideo(b);
     if (b.type === "speaking") return `<div class="block-spk">${speakingHTML(b, "blk-" + (b.id || hashStr(JSON.stringify(b))))}</div>`;
-    if (b.type === "exercise") { n += 1; return renderExercise(b, { num: numPrefix ? `${numPrefix}.${n}` : String(n), ...exOpts(b) }); }
+    if (b.type === "exercise") { n += 1; return renderExercise(b, { num: exNum(b, numPrefix ? `${numPrefix}.${n}` : String(n)), ...exOpts(b) }); }
     return "";
   }).join("\n");
 }
@@ -202,7 +233,7 @@ export function renderExercise(ex, o = {}) {
     const mark = r ? (r.ok ? "ok" : "bad") : "";
     const attrs = `data-ex="${esc(ex.id)}" data-item="${esc(it.id)}" ${dis}`;
     const corr = r && !r.ok && r.correct ? `<span class="corr">Correct: ${esc(showAns(ex, r.correct))}</span>` : "";
-    const keyHint = o.key && o.key[it.id] !== undefined ? `<span class="keyhint">✓ ${esc(showAns(ex, keyText(o.key[it.id])))}</span>` : "";
+    const keyHint = o.key && o.key[it.id] !== undefined && ex.kind !== "open" ? `<span class="keyhint">✓ ${esc(showAns(ex, keyText(o.key[it.id])))}</span>` : "";
     let body = "";
     const play = it.audio ? itemPlayButton(it.audio, ex.once) : "";
 
@@ -246,7 +277,14 @@ export function renderExercise(ex, o = {}) {
       const wc = minW ? `<div class="wc"><span class="wc-n" data-wc="${esc(ex.id)}:${esc(it.id)}">${countWords(val)}</span> words <span class="muted">· at least ${minW}</span></div>` : "";
       const model = o.key && o.key[it.id] ? `<div class="keyhint model"><b>Model answer:</b> ${esc(keyText(o.key[it.id]))}</div>` : "";
       const src = it.zh ? `<span class="src-ru">${it.text}</span><span class="src-zh" lang="zh-Hans">${esc(it.zh)}</span>` : it.text;
-      body = `${src}${model}<textarea class="open-answer" rows="${it.rows || 5}" ${attrs} ${NOAUTO} placeholder="${o.readOnly ? "" : "Type your answer here…"}">${esc(val)}</textarea>${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
+      let pick = "";
+      if (it.choices) {
+        const pid = it.id + PICK, pv = a[pid] ?? "", pr = o.auto?.[pid];
+        const pm = pr ? (pr.ok ? "ok" : "bad") : "";
+        const pk = o.key && o.key[pid] !== undefined ? `<span class="keyhint">✓ ${esc(keyText(o.key[pid]))}</span>` : "";
+        pick = `<div class="pick"><span class="pick-l">${esc(it.pickLabel || ex.pickLabel || "Type")}:</span><select class="gap ${pm}" data-ex="${esc(ex.id)}" data-item="${esc(pid)}" ${dis}><option value="">choose…</option>${it.choices.map((c) => `<option value="${esc(c)}" ${pv === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${pr && !pr.ok && pr.correct ? `<span class="corr">Correct: ${esc(pr.correct)}</span>` : ""}${pk}</div>`;
+      }
+      body = `${src}${pick}${model}<textarea class="open-answer" rows="${it.rows || 5}" ${attrs} ${NOAUTO} placeholder="${o.readOnly ? "" : "Type your answer here…"}">${esc(val)}</textarea>${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
     }
     return `<li${play ? ' class="has-play"' : ""}>${play}${play ? `<div class="li-body">${body}</div>` : body}</li>`;
   }).join("\n");

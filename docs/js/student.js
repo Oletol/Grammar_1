@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261021a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261021a";
+} from "./fb.js?v=20261021c";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021c";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
-  isTeacherChecked, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261021a";
-import "./speaking.js?v=20261021a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021a";
-import { feedbackHTML } from "./writing.js?v=20261021a";
+  isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
+} from "./common.js?v=20261021c";
+import "./speaking.js?v=20261021c";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021c";
+import { feedbackHTML } from "./writing.js?v=20261021c";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -274,7 +274,7 @@ function renderMain() {
         itemExtra: fb ? (itemId) => feedbackHTML(fb[itemId], { checkedAt: fmtTime(fbAt) }) : null,
         answers: sub.answers?.[ex.id] || {},
         readOnly: readOnly || exDone,
-        auto: res ? (isAuto(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : undefined,
+        auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : undefined,
         manual: res?.manual?.[ex.id],
         showPending: !!res,
         tag: ex.check === "teacher" && !res ? (exDone ? "Checked" : fb ? "Feedback ready – you can correct your text" : "Checked by your teacher") : "",

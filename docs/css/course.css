@@ -568,3 +568,29 @@ details.zh-note .zh-b i{font-style:italic;color:var(--navy)}
 .art-text select.gap{min-width:3.6em}
 .sb-sgroup{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--sb-accent);opacity:.8;margin:10px 0 3px 11px}
 .sb-sgroup:first-child{margin-top:4px}
+/* Week 7: dropdown next to an open answer, model explanations, verb table, long dropdown options */
+.pick{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:6px 0 4px}
+.pick-l{font-size:13px;font-weight:700;color:var(--gold)}
+.pick select.gap{font-size:14px;max-width:100%}
+.model-ex{border-left:4px solid var(--gold);background:var(--gold3);border-radius:0 var(--r2) var(--r2) 0;padding:10px 16px;margin:18px 0;font-size:15.2px;line-height:1.65;color:var(--ink2)}
+.model-ex .mx-h{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
+.model-ex .mx-s{font-family:var(--serif);font-size:16.5px;color:var(--navy);margin:0 0 4px}
+.model-ex p{margin:0 0 6px}
+details.vt{border:1px solid #cfe0f0;border-radius:var(--r);background:#fff;margin:18px 0;overflow:hidden}
+details.vt>summary{cursor:pointer;list-style:none;padding:12px 16px;font-weight:700;color:var(--navy);background:linear-gradient(180deg,#f7fbff,#f1f7fd)}
+details.vt>summary::-webkit-details-marker{display:none}
+details.vt>summary::before{content:"+ ";font-family:var(--mono)}
+details.vt[open]>summary::before{content:"– "}
+details.vt .vt-sub{display:block;font-weight:400;font-size:13px;color:var(--mut,#6c7487);margin-top:2px}
+.vt-wrap{overflow-x:auto;padding:4px 10px 12px}
+table.vtab{border-collapse:collapse;width:100%;font-size:14.5px;min-width:560px}
+table.vtab th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--navy3);padding:8px 8px;border-bottom:2px solid #cfe0f0}
+table.vtab td{padding:6px 8px;vertical-align:top;border-bottom:1px solid #edf1f6}
+table.vtab tbody{border-top:2px solid #dbe6f2}
+table.vtab tbody:nth-child(odd) td{background:#fafcfe}
+table.vtab td.v{font-weight:700;color:var(--navy);white-space:nowrap}
+table.vtab td.f{font-family:var(--serif);white-space:nowrap}
+table.vtab td.zh{font-size:15px}
+.r1-list select.gap{max-width:100%;white-space:normal;font-size:13.5px}
+.r1-list li{margin-bottom:14px}
+.r1-list .src{margin-bottom:4px}
