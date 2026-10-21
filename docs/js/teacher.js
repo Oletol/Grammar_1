@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-} from "./fb.js?v=20261015g3";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261015g3";
+} from "./fb.js?v=20261021a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021a";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, gradeExercise, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261015g3";
-import "./speaking.js?v=20261015g3";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g3";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261015g3";
+} from "./common.js?v=20261021a";
+import "./speaking.js?v=20261021a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021a";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261021a";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -225,7 +225,7 @@ function viewUnit(r) {
   const blocks = [...sec.blocks];
   for (const note of [...(d.notes[sec.id] || [])].reverse()) blocks.splice(note.at, 0, { type: "teacher-note", html: note.html });
   const prev = secs[i - 1], next = secs[i + 1];
-  return bar + docxBar(u) + pageHead(`${esc(uLabel(u))} &middot; ${n}.${i + 1}`, esc(sec.title), esc(meta.subtitle || sec.subtitle || ""))
+  return bar + docxBar(u) + pageHead(`${esc(uLabel(u))}${meta.group ? ` &middot; ${esc(meta.group)}` : ""} &middot; ${n}.${i + 1}`, esc(sec.title), esc(meta.subtitle || sec.subtitle || ""))
     + renderBlocks(blocks, (ex) => ({
       key: d.keys[ex.id] || {}, readOnly: true,
       tag: ex.check === "teacher" ? (isManual(ex) ? "Writing check by the teacher" : "Checked by the teacher") : "",
@@ -251,9 +251,9 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261015g3");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261021a");
     const teacher = ver === "teacher";
-    const sections = d.content.sections.map((s) => ({ ...s, subtitle: (u.sections || []).find((m) => m.id === s.id)?.subtitle || s.subtitle || "" }));
+    const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
       keys: teacher ? d.keys : {}, notes: teacher ? d.notes : {}, teacher });
     const safe = (t) => String(t).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -695,7 +695,7 @@ function splitUnit(u) {
     title: u.title, order: Number(u.order ?? 0),
     ...(u.label ? { label: String(u.label) } : {}), ...(u.num !== undefined ? { num: String(u.num) } : {}), ...(u.series ? { series: String(u.series) } : {}),
     status: u.status || (hasContent ? "ready" : "soon"),
-    sections: (u.sections || []).map((s) => ({ id: s.id, title: s.title, ...(s.subtitle ? { subtitle: s.subtitle } : {}) })),
+    sections: (u.sections || []).map((s) => ({ id: s.id, title: s.title, ...(s.subtitle ? { subtitle: s.subtitle } : {}), ...(s.group ? { group: s.group } : {}) })),
   };
   // timed tests: hidden from students until the teacher opens them
   const tests = {}, testKeys = {};

@@ -1,6 +1,6 @@
 // Page shell shared by the student and teacher pages:
 // collapsible sidebar (desktop: slides away; mobile: drawer) and the unit accordion.
-import { esc } from "./common.js?v=20261015g3";
+import { esc } from "./common.js?v=20261021a";
 
 const LS_KEY = "sbCollapsed";
 
@@ -45,9 +45,11 @@ export function renderUnitNav(el, { units, state, route, hrefPrefix = "", empty 
     const current = route.unit === u.id;
     const canOpen = !st.locked && (u.sections || []).length && u.status !== "soon";
     const open = canOpen && (current || manual.has(u.id));
+    let grp = null;   // sections grouped inside the week: Theory, Classwork, Home Assignments, Supplementary
     const secs = canOpen ? (u.sections || []).map((s, j) => {
       const on = current && (route.section || u.sections[0]?.id) === s.id;
-      return `<a class="sb-item ${on ? "on" : ""}" href="#${hrefPrefix}${esc(u.id)}/${esc(s.id)}">
+      const gh = s.group && s.group !== grp ? `<div class="sb-sgroup">${esc((grp = s.group))}</div>` : "";
+      return `${gh}<a class="sb-item ${on ? "on" : ""}" href="#${hrefPrefix}${esc(u.id)}/${esc(s.id)}">
         <span class="n">${num}.${j + 1}</span><span class="t">${esc(s.title)}${s.subtitle ? `<span class="s">${esc(s.subtitle)}</span>` : ""}</span></a>`;
     }).join("") : "";
     return `${head}<div class="sb-unit ${open ? "open" : ""} ${st.locked ? "locked" : ""} ${current ? "current" : ""}">

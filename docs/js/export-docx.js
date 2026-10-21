@@ -283,6 +283,8 @@ export async function exportUnitDocx({ courseTitle, unitNum, unitLabel = "", uni
 
   sections.forEach((sec, si) => {
     if (si > 0) body.push(new Paragraph({ children: [new PageBreak()] }));
+    if (sec.group && sec.group !== sections[si - 1]?.group)
+      body.push(para([new TextRun({ text: sec.group, bold: true, allCaps: true, color: COLORS.gold, size: 22 })], { after: 60 }));
     body.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: `${unitNum}.${si + 1}  ${sec.title}` })], spacing: { after: 60 } }));
     if (sec.subtitle) body.push(para([new TextRun({ text: sec.subtitle, italics: true, color: COLORS.mut })], { after: 200 }));
     const blocks = [...(sec.blocks || [])];

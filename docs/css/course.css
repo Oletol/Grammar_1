@@ -566,3 +566,5 @@ details.zh-note .zh-b i{font-style:italic;color:var(--navy)}
 .an-list .src .use select.gap,.an-list .tpl .use+select.gap{font-size:13px}
 .an-list .src .use select.gap{border-color:#e3d3a8;background:var(--gold3);max-width:11em}
 .art-text select.gap{min-width:3.6em}
+.sb-sgroup{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--sb-accent);opacity:.8;margin:10px 0 3px 11px}
+.sb-sgroup:first-child{margin-top:4px}

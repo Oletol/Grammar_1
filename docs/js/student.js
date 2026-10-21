@@ -4,15 +4,15 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261015g3";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261015g3";
+} from "./fb.js?v=20261021a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261021a";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
-} from "./common.js?v=20261015g3";
-import "./speaking.js?v=20261015g3";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261015g3";
-import { feedbackHTML } from "./writing.js?v=20261015g3";
+} from "./common.js?v=20261021a";
+import "./speaking.js?v=20261021a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261021a";
+import { feedbackHTML } from "./writing.js?v=20261021a";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -263,7 +263,7 @@ function renderMain() {
   }
   content.dataset.view = viewKey;
   content.dataset.unit = unit.id;
-  content.innerHTML = `<header class="page-h"><div class="pe">${esc(uLabel(unit))} &middot; ${unitNum(unit)}.${secIdx}</div>
+  content.innerHTML = `<header class="page-h"><div class="pe">${esc(uLabel(unit))}${meta.group ? ` &middot; ${esc(meta.group)}` : ""} &middot; ${unitNum(unit)}.${secIdx}</div>
       <h2>${esc(sec.title)}</h2>${meta.subtitle || sec.subtitle ? `<p class="pl">${esc(meta.subtitle || sec.subtitle)}</p>` : ""}</header>`
     + renderBlocks(sec.blocks, (ex) => {
       const exDone = relEx.includes(ex.id);   // the teacher has checked this exercise
