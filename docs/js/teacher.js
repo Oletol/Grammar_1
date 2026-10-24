@@ -4,16 +4,17 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261022a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261022a";
+} from "./fb.js?v=20261024a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261024a";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2,
-} from "./common.js?v=20261022a";
-import "./speaking.js?v=20261022a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261022a";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261022a";
+} from "./common.js?v=20261024a";
+import "./speaking.js?v=20261024a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024a";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261024a";
+import { focusCheck } from "./grammar-focus.js?v=20261024a";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -281,7 +282,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261022a");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261024a");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -540,21 +541,25 @@ async function checkExercise(gid, unitId, exId) {
 // Free writing ("kind": "open", "check": "teacher"): the check gives feedback, the text stays editable
 function writingBar(u, ex, g) {
   const done = (g.feedbackEx?.[u.id] || []).includes(ex.id);
+  const what = isTranslation(ex) ? "translations" : "writing";
   return `<div class="tb-row"><span>Group <b>${esc(g.name)}</b>: <span class="pill ${done ? "on" : "off"}">${done ? "feedback shown" : "not checked yet"}</span></span>
     <span class="sp" style="flex:1"></span>
     <span id="wcheck-progress" class="muted"></span>
-    <button class="btn small good" data-act="check-writing" data-unit="${esc(u.id)}" data-ex="${esc(ex.id)}" ${g.openUnits.includes(u.id) ? "" : "disabled"}>${done ? "Check again" : "Check the writing now"}</button>
+    <button class="btn small good" data-act="check-writing" data-unit="${esc(u.id)}" data-ex="${esc(ex.id)}" ${g.openUnits.includes(u.id) ? "" : "disabled"}>${done ? "Check again" : `Check the ${what} now`}</button>
     ${done ? `<button class="btn small danger" data-act="hide-writing" data-unit="${esc(u.id)}" data-ex="${esc(ex.id)}">Hide feedback</button>` : ""}
   </div>`;
 }
 
 async function checkWriting(gid, unitId, exId) {
   await guard(async () => {
-    const { content } = await loadUnitData(unitId, true);
+    const { content, keys } = await loadUnitData(unitId, true);
     const ex = exercisesOf(content).find((e) => e.id === exId);
+    const tr = isTranslation(ex);                       // translations: grammar of the week instead of vocabulary levels
+    const exKeys = keys?.[exId] || {};
+    const itemIds = new Set((ex.items || []).map((it) => it.id));
     const subs = (await getDocs(query(collection(db, "submissions"), where("groupId", "==", gid), where("unitId", "==", unitId)))).docs.map((d) => d.data())
       .filter((s) => Object.values(s.answers?.[exId] || {}).some((v) => String(v).trim()));
-    if (!confirm(`Check the writing in “${ex.title}”?\nStudents with answers: ${subs.length}.\nThe texts are sent to LanguageTool for the grammar check (about 3 seconds per student). Students will see the feedback and can correct their texts.`)) return;
+    if (!confirm(`Check the ${tr ? "translations" : "writing"} in “${ex.title}”?\nStudents with answers: ${subs.length}.\nThe texts are sent to LanguageTool for the grammar and spelling check (about 3 seconds per student).${tr ? "\nThe tenses and the nouns are compared with the model translations (this part stays in your browser)." : ""} Students will see the feedback and can correct their texts.`)) return;
     const V = await loadVocab();
     const phrases = unitVocabulary(content);
     let n = 0, ltFailed = 0;
@@ -562,14 +567,16 @@ async function checkWriting(gid, unitId, exId) {
       n++;
       const prog = document.querySelector("#wcheck-progress");
       if (prog) prog.textContent = `Checking ${n} of ${subs.length}…`;
-      const texts = s.answers[exId] || {};
+      const texts = Object.fromEntries(Object.entries(s.answers[exId] || {}).filter(([k]) => itemIds.has(k)));   // not the "type" menus
       let issues = {}, grammarError = false;
       try { issues = await grammarCheck(texts); } catch (e) { console.warn(e); grammarError = true; ltFailed++; }
       const fb = {};
       for (const it of ex.items || []) {
         const text = String(texts[it.id] || "");
         if (!text.trim()) continue;
-        fb[it.id] = { text, issues: issues[it.id] || [], grammarError, vocab: vocabProfile(text, V, phrases), unitTotal: phrases.length };
+        fb[it.id] = tr
+          ? { text, issues: issues[it.id] || [], grammarError, translation: true, ...(exKeys[it.id] ? { focus: focusCheck(text, exKeys[it.id]) } : {}) }
+          : { text, issues: issues[it.id] || [], grammarError, vocab: vocabProfile(text, V, phrases), unitTotal: phrases.length };
       }
       await setDoc(doc(db, "exerciseResults", subId(unitId, s.uid)), {
         uid: s.uid, groupId: gid, unitId,
@@ -578,7 +585,7 @@ async function checkWriting(gid, unitId, exId) {
       if (n < subs.length && !grammarError) await sleep(3200);   // LanguageTool: at most 20 requests a minute
     }
     await updateDoc(doc(db, "groups", gid), { [`feedbackEx.${unitId}`]: arrayUnion(exId) });
-    toast(ltFailed ? `Done. The grammar check was not available for ${ltFailed} of ${subs.length}; the vocabulary check worked.` : `Done: ${subs.length} texts checked. Students can see the feedback now.`, 7000);
+    toast(ltFailed ? `Done. LanguageTool was not available for ${ltFailed} of ${subs.length}; the ${tr ? "tense and noun check" : "vocabulary check"} worked.` : `Done: ${subs.length} ${tr ? "translations" : "texts"} checked. Students can see the feedback now.`, 7000);
   });
 }
 

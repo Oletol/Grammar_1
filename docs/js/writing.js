@@ -2,7 +2,8 @@
 // Octanove C1–C2, Google 10,000 frequency list as a fallback) and use of the unit's vocabulary.
 // The check runs in the teacher's browser when the teacher clicks the button; the result is
 // saved for each student in exerciseResults and shown under their text.
-import { esc } from "./common.js?v=20261022a";
+import { esc } from "./common.js?v=20261024a";
+import { tenseName } from "./grammar-focus.js?v=20261024a";
 
 const LT_URL = "https://api.languagetool.org/v2/check";
 const LT_LANG = "en-GB";
@@ -158,14 +159,34 @@ export function feedbackHTML(fb, { checkedAt } = {}) {
   const total = v ? LEVELS.reduce((n, l) => n + v.counts[l], 0) || 1 : 1;
   const bars = v ? LEVELS.map((l) => `<span class="lvchip lv-${l}" title="${l}: ${v.counts[l]} words">${l} <b>${Math.round((100 * v.counts[l]) / total)}%</b></span>`).join("") : "";
   return `<div class="wfb">
-    <div class="wfb-h">Feedback on your text${checkedAt ? ` <span class="muted">· checked ${esc(checkedAt)}</span>` : ""}</div>
+    <div class="wfb-h">Feedback on your ${fb.translation ? "translation" : "text"}${checkedAt ? ` <span class="muted">· checked ${esc(checkedAt)}</span>` : ""}</div>
     ${fb.grammarError ? `<p class="muted">The grammar check was not available this time.</p>` : ""}
     <div class="wfb-text">${html}</div>
-    ${issues ? `<ul class="wfb-issues">${issues}</ul>` : fb.grammarError ? "" : `<p class="wfb-ok">No grammar or spelling problems were found.</p>`}
+    ${issues ? `<ul class="wfb-issues">${issues}</ul>` : fb.grammarError ? "" : `<p class="wfb-ok">LanguageTool found no grammar or spelling problems.</p>`}
+    ${focusHTML(fb.focus)}
     ${v ? `<div class="wfb-v"><span class="muted">${v.words} words</span> ${bars}</div>
       ${v.high.length ? `<p class="wfb-line"><b>Words at B2 and above:</b> ${v.high.map((x) => `${esc(x.w)} <small>${x.l}</small>`).join(", ")}</p>` : ""}
       ${fb.unitTotal ? `<p class="wfb-line"><b>Unit phrases used (${v.unitUsed.length} of ${fb.unitTotal}):</b> ${v.unitUsed.length ? v.unitUsed.map(esc).join(", ") : "none yet"}</p>` : ""}
       ${v.offList.length ? `<p class="wfb-line muted">Not in the word lists (names, rare words or misspellings): ${v.offList.map(esc).join(", ")}</p>` : ""}` : ""}
-    <p class="wfb-src">Grammar suggestions by <a href="https://languagetool.org" target="_blank">LanguageTool</a> · vocabulary levels from the CEFR-J Wordlist and the Octanove Vocabulary Profile</p>
+    <p class="wfb-src">Grammar suggestions by <a href="https://languagetool.org" target="_blank">LanguageTool</a>${fb.translation ? "" : " · vocabulary levels from the CEFR-J Wordlist and the Octanove Vocabulary Profile"}</p>
+  </div>`;
+}
+
+// grammar of the week in a translation: tenses and nouns compared with the model translation
+function focusHTML(fc) {
+  if (!fc) return "";
+  const forms = (fc.forms || []).filter((f) => f.tense !== "PrI" || f.passive);
+  const chips = forms.map((f) => `<span class="gf-chip"><span class="gf-w">${esc(f.words)}</span> ${esc(tenseName(f.tense))}${f.passive ? " Passive" : ""}</span>`).join("");
+  const lines = [
+    ...(fc.missing || []).map((t) => `<li>This sentence needs the <b>${esc(tenseName(t))}</b>, and it is not in your translation.</li>`),
+    ...(fc.fewer || []).map((t) => `<li>Check every verb that needs the <b>${esc(tenseName(t))}</b>: your translation has fewer such forms than the task needs.</li>`),
+    ...(fc.extra || []).map((e) => `<li><b>${esc(tenseName(e.tense))}</b> (${e.words.map((x) => `“${esc(x)}”`).join(", ")}): is this the right tense here?</li>`),
+    ...(fc.nouns || []).map((n) => `<li>${esc(n)}</li>`),
+  ];
+  return `<div class="gf">
+    <div class="gf-h">Grammar of the week</div>
+    ${chips ? `<div class="gf-forms"><span class="muted">Your verb forms:</span> ${chips}</div>` : ""}
+    ${lines.length ? `<ul class="gf-issues">${lines.join("")}</ul>` : `<p class="wfb-ok">The tenses and the nouns match the task.</p>`}
+    <p class="gf-note">This is an automatic hint. A different correct translation can also get a note here: your teacher makes the final decision.</p>
   </div>`;
 }

@@ -137,6 +137,7 @@ Authentication, Users, меню строки, Delete account.
 | Аудио | `{"type": "audio", "src": "media/u1/listening-1.mp3", "title": "Listening 1.5", "note": "Listen twice."}`; скрипт записи — отдельным блоком `teacher-note` |
 | Развёрнутый письменный ответ со счётчиком слов | `"kind": "open", "minWords": 20` (у упражнения или у пункта) |
 | Проверка письменного ответа (грамматика LanguageTool + уровень лексики CEFR + фразы юнита) | `"kind": "open", "check": "teacher"`; кнопка **Check the writing now** над упражнением; студент видит разбор и может исправить текст |
+| Проверка перевода (LanguageTool + грамматика недели) | переводное упражнение (`translat` в названии или задании) с `"kind": "open", "check": "teacher"` и эталонами в `answer`; кнопка **Check the translations now**. Сайт сравнивает перевод с эталоном: времена (Present Perfect, Past Indefinite и др.) и существительные с постоянным числом (news, advice, money… / police, cattle, glasses…). Код в `docs/js/grammar-focus.js`; эталоны студенту не показываются, видны только названия времён и его собственные слова |
 | Дополнить базу лексики юнита | у любого упражнения `"vocab": ["rely on", "complain about"]`; слова флеш-карточек попадают в базу сами |
 | Карточки для обсуждения (одна сторона, листаются, с номером упражнения) | `{"type": "flashcards", "style": "discussion", "numbered": true, "cards": [{"front": "Is it possible…?"}]}` |
 | Блок обсуждения, подзаголовок шага | `html`-блоки с классами `discuss` и `sub-h`, как в исходной книге |
