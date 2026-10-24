@@ -4,17 +4,17 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261024a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261024a";
+} from "./fb.js?v=20261024b";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261024b";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2,
-} from "./common.js?v=20261024a";
-import "./speaking.js?v=20261024a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024a";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261024a";
-import { focusCheck } from "./grammar-focus.js?v=20261024a";
+} from "./common.js?v=20261024b";
+import "./speaking.js?v=20261024b";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024b";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261024b";
+import { focusCheck } from "./grammar-focus.js?v=20261024b";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -272,7 +272,8 @@ function viewUnit(r) {
 function docxBar(u) {
   return `<div class="dl-bar"><span>Download ${esc(uLabel(u))} as Word:</span>
     <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="student">Student's Book (.docx)</button>
-    <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="teacher">Teacher's Book (.docx)</button></div>`;
+    <button class="btn small" data-act="docx" data-unit="${esc(u.id)}" data-ver="teacher">Teacher's Book (.docx)</button>
+    <button class="btn small" data-act="keys-toggle" title="Hide the keys and teaching notes, e.g. to show the exercises on the screen in class">${document.body.classList.contains("keys-off") ? "Show keys" : "Hide keys"}</button></div>`;
 }
 async function downloadDocx(unitId, ver, btn) {
   const u = T.units.find((x) => x.id === unitId);
@@ -282,7 +283,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261024a");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261024b");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -644,6 +645,9 @@ document.addEventListener("change", (e) => {
   }
 });
 
+// keys and teaching notes hidden (button "Hide keys" above a unit); remembered in this browser
+try { if (localStorage.getItem("keysOff")) document.body.classList.add("keys-off"); } catch {}
+
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act]");
   if (!b) return;
@@ -656,6 +660,11 @@ document.addEventListener("click", (e) => {
     }),
     "release": () => releaseUnit(T.gid, u),
     "docx": () => downloadDocx(u, b.dataset.ver, b),
+    "keys-toggle": () => {
+      const off = document.body.classList.toggle("keys-off");
+      try { localStorage.setItem("keysOff", off ? "1" : ""); } catch {}
+      document.querySelectorAll('[data-act="keys-toggle"]').forEach((x) => { x.textContent = off ? "Show keys" : "Hide keys"; });
+    },
     "check-ex": () => checkExercise(T.gid, u, b.dataset.ex),
     "check-writing": () => checkWriting(T.gid, u, b.dataset.ex),
     "hide-writing": () => guard(async () => updateDoc(doc(db, "groups", T.gid), { [`feedbackEx.${u}`]: arrayRemove(b.dataset.ex) })),

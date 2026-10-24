@@ -679,3 +679,16 @@ i.vb{font-family:var(--sans);font-size:.88em;color:var(--plum);white-space:nowra
 .jx.home{background:var(--gold3);color:#8a5d13}
 @media print{.ex-foot,.ex-bar{display:none!important}}
 .jt td.jc.num{text-align:center}
+
+/* ---- Week 8+: keys with comments inside teaching notes, folded by default; "Hide keys" in the Teacher's Edition ---- */
+.tnote details.kx{margin:4px 0 0}
+.tnote details.kx>summary{cursor:pointer;list-style:none;font-weight:700;color:var(--plum);font-size:14px}
+.tnote details.kx>summary::-webkit-details-marker{display:none}
+.tnote details.kx>summary::before{content:"+ ";font-family:var(--mono)}
+.tnote details.kx[open]>summary::before{content:"– "}
+.tnote details.kx ol{margin:10px 0 0;padding-left:26px}
+.tnote details.kx li{margin:0 0 7px;line-height:1.55}
+.tnote details.kx b{color:var(--ok)}
+.tnote .why{color:var(--mut)}
+body.keys-off .keyhint,body.keys-off .tnote{display:none!important}
+@media print{.tnote details.kx>summary::before{content:""}}
