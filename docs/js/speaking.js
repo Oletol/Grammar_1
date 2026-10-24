@@ -1,7 +1,7 @@
 // Speaking: timers with an in-browser voice recorder (from the msupm2 course engine).
 // The recording never leaves the browser: it is kept in memory as a blob, played back here and,
 // if the student wants, saved to their own computer with "Download". Reloading the page clears it.
-import { registerSpeaking, esc } from "./common.js?v=20261021e";
+import { registerSpeaking, esc } from "./common.js?v=20261022a";
 
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const SPK = new Map();   // key -> state (survives re-rendering of the page)
@@ -89,7 +89,13 @@ async function spkAction(b) {
   const el = b.closest(".spk"), key = el.dataset.spk, st = state(el), act = b.dataset.spkAct;
   if (act === "start") { st.running ? stopTimer(st) : startTimer(key); }
   if (act === "reset") { stopTimer(st); st.left = st.sec; if (st.rec) stopRec(key); }
-  if (act === "rec") { st.rec ? stopRec(key) : await startRec(key); }
+  if (act === "rec") {
+    try { st.rec ? stopRec(key) : await startRec(key); }
+    catch (e) {
+      st.stream?.getTracks().forEach((t) => t.stop()); st.stream = null; stopMeter(st); st.rec = null;
+      st.err = "The recording could not start (" + (e?.name || e?.message || "error") + "). Please reload the page and try again, or use Google Chrome.";
+    }
+  }
   syncKey(key);
 }
 
@@ -100,13 +106,15 @@ function typeList() {
   const all = IS_SAFARI ? ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"] : ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
   return [...all.filter((t) => { try { return MediaRecorder.isTypeSupported?.(t); } catch { return false; } }), ""];
 }
-// a recorder that really starts: try the formats one by one (some browsers say "supported" and then fail)
+// A recorder that really starts: the formats are tried one by one, because some browsers
+// say a format is "supported" and then refuse to record in it. Before this fix such a refusal
+// stopped everything silently: the microphone was on, but nothing was recorded.
 function makeRecorder(stream) {
   let last = null;
   for (const type of typeList()) {
     try {
       const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-      rec.start();
+      rec.start(1000);
       return { rec, type };
     } catch (e) { last = e; }
   }
@@ -179,6 +187,7 @@ function startMeter(st, key) {
   try {
     actx ??= new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();
+    // the level meter listens to a copy of the stream, so that it never takes the sound away from the recorder
     st.meterStream = st.stream.clone ? st.stream.clone() : st.stream;
     const src = actx.createMediaStreamSource(st.meterStream);
     const an = actx.createAnalyser();
