@@ -103,7 +103,7 @@ function isCorrectMulti(given, key) {
 }
 // the answer shown to the student: the required parts, first spelling of each
 export const multiShow = (key) => { const ps = partsOf(key); const req = ps.filter((p) => !p.opt); return (req.length ? req : ps.slice(0, 1)).map((p) => firstKey(p.alts[0])).join(" / "); };
-export const shownKey = (ex, key) => (ex?.multi ? multiShow(key) : firstKey(key));
+export const shownKey = (ex, key, it) => (it?.choices ? String((Array.isArray(key) ? key[0] : key) ?? "") : ex?.multi ? multiShow(key) : firstKey(key));
 // exercise number: her own number ("3", "A1", "R2") if given, otherwise the automatic one
 export const exNum = (ex, auto) => (ex?.no ? String(ex.no) : auto);
 // open items with a dropdown next to the answer (e.g. the type of a since-sentence): auto-checked part
@@ -114,6 +114,11 @@ export const hasPick = (ex) => ex.kind === "open" && (ex.items || []).some((it) 
 export const firstKey = (key) => expandKey(Array.isArray(key) ? key[0] ?? "" : key ?? "")[0].replace(/\s+/g, " ").trim();
 
 export function isCorrect(given, key, opts = {}) {
+  // dropdowns: the chosen option is compared as it is (options may contain brackets, slashes or a dash "–")
+  if (opts.choice) {
+    const g = String(given ?? "").trim();
+    return g !== "" && (Array.isArray(key) ? key : [key]).some((k) => String(k ?? "").trim() === g);
+  }
   if (given == null || norm(given) === "") return false;
   if (opts.multi) return isCorrectMulti(given, key);
   const P = !!opts.punct;
@@ -141,8 +146,8 @@ export function gradeAuto(content, answers, keys) {
       const id = isAuto(ex) ? it.id : it.id + PICK;
       const given = answers?.[ex.id]?.[id] ?? "";
       const key = keys?.[ex.id]?.[id];
-      const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi && isAuto(ex) });
-      items[ex.id][id] = { given, ok, correct: isAuto(ex) ? shownKey(ex, key) : firstKey(key) };
+      const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi && isAuto(ex), choice: !!it.choices });
+      items[ex.id][id] = { given, ok, correct: isAuto(ex) ? shownKey(ex, key, it) : shownKey({}, key, it) };
       max += 1;
       if (ok) score += 1;
     }
@@ -157,8 +162,8 @@ export function gradeExercise(ex, answers, keys) {
   for (const it of ex.items || []) {
     const given = answers?.[it.id] ?? "";
     const key = keys?.[it.id];
-    const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi });
-    items[it.id] = { given, ok, correct: shownKey(ex, key) };
+    const ok = isCorrect(given, key, { punct: ex.punct, multi: ex.multi, choice: !!it.choices });
+    items[it.id] = { given, ok, correct: shownKey(ex, key, it) };
     if (ok) score += 1;
   }
   return { items, score, max: (ex.items || []).length };

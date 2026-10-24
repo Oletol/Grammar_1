@@ -4,17 +4,17 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261024b";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261024b";
+} from "./fb.js?v=20261024c";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261024c";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2,
-} from "./common.js?v=20261024b";
-import "./speaking.js?v=20261024b";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024b";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261024b";
-import { focusCheck } from "./grammar-focus.js?v=20261024b";
+} from "./common.js?v=20261024c";
+import "./speaking.js?v=20261024c";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024c";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261024c";
+import { focusCheck } from "./grammar-focus.js?v=20261024c";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -283,7 +283,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261024b");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261024c");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -346,7 +346,7 @@ function exStats(ex) {
       const v = s.answers?.[ex.id]?.[it.id];
       if (!String(v ?? "").trim()) continue;
       r.n++;
-      if (isCorrect(v, keys[it.id], { punct: ex.punct })) r.ok++;
+      if (isCorrect(v, keys[it.id], { punct: ex.punct, multi: ex.multi, choice: !!it.choices })) r.ok++;
       else (r.wrong[norm(v)] ??= { label: answerLabel(ex, String(v).trim()), names: [] }).names.push(nameOf(s.uid));
     }
     r.wrong = Object.values(r.wrong).sort((a, b) => b.names.length - a.names.length);
