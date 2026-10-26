@@ -4,16 +4,16 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261024c";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261024c";
+} from "./fb.js?v=20261026a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261026a";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
-  DONE, doneMap, exerciseNumbers, planTag,
-} from "./common.js?v=20261024c";
-import "./speaking.js?v=20261024c";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261024c";
-import { feedbackHTML } from "./writing.js?v=20261024c";
+  DONE, doneMap, exerciseNumbers, planTag, gradeExercise,
+} from "./common.js?v=20261026a";
+import "./speaking.js?v=20261026a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261026a";
+import { feedbackHTML } from "./writing.js?v=20261026a";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -279,6 +279,8 @@ function renderMain() {
       const fbAt = S.exr[unit.id]?.feedbackAt?.[ex.id];
       const isDone = !!done[ex.id];
       const factor = res ? res.factors?.[ex.id] : exDone ? S.exr[unit.id]?.factors?.[ex.id] : undefined;
+      // self-check exercises (Supplementary Exercises): the key comes with the exercise, "Check my answers" shows the result at once
+      const selfRes = ex.self && ex.selfKey && isDone && !res && !exDone ? gradeExercise(ex, sub.answers?.[ex.id] || {}, ex.selfKey).items : undefined;
       return {
         itemExtra: fb ? (itemId) => feedbackHTML(fb[itemId], { checkedAt: fmtTime(fbAt) }) : null,
         answers: sub.answers?.[ex.id] || {},
@@ -287,10 +289,10 @@ function renderMain() {
         factor,
         cls: isDone || exDone ? "is-done" : "",
         after: readOnly || exDone ? "" : doneFootHTML(ex, isDone, sub.answers?.[ex.id]),
-        auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : undefined,
+        auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : selfRes,
         manual: res?.manual?.[ex.id],
         showPending: !!res,
-        tag: ex.check === "teacher" && !res ? (exDone ? "Checked" : fb ? "Feedback ready – you can correct your text" : "Checked by your teacher") : "",
+        tag: ex.self && ex.selfKey && !res && !exDone ? "Self-check" : ex.check === "teacher" && !res ? (exDone ? "Checked" : fb ? "Feedback ready – you can correct your text" : "Checked by your teacher") : "",
       };
     }, `${unitNum(unit)}.${secIdx}`) + pagerHTML(unit, c, sec);
   renderUnitBar(unit, sub, released, res);
@@ -302,12 +304,15 @@ function renderMain() {
 // (they can open it again with "Change my answers"), and the unit can be submitted only when
 // all its exercises are done.
 function doneFootHTML(ex, isDone, ans) {
+  const self = ex.self && ex.selfKey;
+  if (isDone && self) return `<div class="ex-foot done"><span class="ok-mark">✓ Checked</span>
+    <button class="btn small" type="button" data-undone="${esc(ex.id)}">Try again</button></div>`;
   if (isDone) return `<div class="ex-foot done"><span class="ok-mark">✓ Done</span>
     <button class="btn small" type="button" data-undone="${esc(ex.id)}">Change my answers</button></div>`;
   const total = (ex.items || []).length;
   const filled = (ex.items || []).filter((it) => String(ans?.[it.id] ?? "").trim()).length;
   return `<div class="ex-foot"><span class="muted">${filled} of ${total} answered</span>
-    <button class="btn small primary" type="button" data-done="${esc(ex.id)}">Done</button></div>`;
+    <button class="btn small primary" type="button" data-done="${esc(ex.id)}">${self ? "Check my answers" : "Done"}</button></div>`;
 }
 let pendingScroll = null;
 function scrollToEx(exId) {
@@ -326,7 +331,7 @@ $("#content").addEventListener("click", (e) => {
   if (d.dataset.done) {
     const ex = exercisesOf(S.content[unitId]).find((x) => x.id === exId);
     const empty = (ex?.items || []).filter((it) => !String(sub.answers?.[exId]?.[it.id] ?? "").trim()).length;
-    if (empty && !confirm(`${empty} of ${(ex.items || []).length} items are still empty. Mark this exercise as done anyway?`)) return;
+    if (empty && !confirm(`${empty} of ${(ex.items || []).length} items are still empty. ${ex?.self && ex?.selfKey ? "Check your answers anyway?" : "Mark this exercise as done anyway?"}`)) return;
   }
   sub.answers ??= {};
   const map = { ...doneMap(sub.answers) };
