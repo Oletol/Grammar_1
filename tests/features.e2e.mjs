@@ -17,10 +17,8 @@ const exById = Object.fromEntries(u1.sections.flatMap((s) => s.blocks.filter((b)
 const key = (ex, it) => { const a = exById[ex].items.find((x) => x.id === it).answer; return Array.isArray(a) ? a[0] : a; };
 const nItems = (ex) => exById[ex].items.length;
 
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-  args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
-});
+const LAUNCH = { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] };
+const browser = await chromium.launch({ ...LAUNCH, executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" }).catch(() => chromium.launch(LAUNCH));
 const ctx = await browser.newContext({ viewport: { width: 1360, height: 950 }, permissions: ["microphone"] });
 await ctx.route("**/js/fb.js*", (r) => r.fulfill({ contentType: "text/javascript", body: mock }));
 const errors = [];
@@ -137,9 +135,13 @@ await s2.evaluate(() => { location.hash = "#w7/used-class"; });
 await s2.waitForSelector(sel("p4", "1"));
 await s1.fill(sel("p4", "1"), key("p4", "1"));
 await s1.fill(sel("p4", "2"), "wrong answer");
+await s1.waitForTimeout(800);
+assert.equal(await t.locator('[data-is="p4|1"] .ib-ok').count(), 0, "answers are not sent before Done");
+await s1.click('[data-done="p4"]');
 await s1.waitForTimeout(1600);   // the mock keeps the whole database in one localStorage entry: two saves at the same moment can overwrite each other
 await s2.fill(sel("p4", "1"), key("p4", "1"));
 await s2.fill(sel("p4", "2"), "wrong answer");
+await s2.click('[data-done="p4"]');
 await s1.waitForTimeout(1600);
 await t.waitForSelector('[data-is="p4|1"] .ib-ok:text("✓2")', { timeout: 6000 });
 await t.waitForSelector('[data-is="p4|2"] .ib-bad:text("✗2")');
@@ -152,6 +154,9 @@ assert.ok((await t.textContent('[data-mi="p4"]')).includes("Anna Ivanova"));
 await t.locator("#ex-p4").evaluate((el) => { el.previousElementSibling.scrollIntoView(); window.scrollBy(0, -70); });
 await shot(t, "02-teacher-exercise-stats");
 
+await s1.click('[data-undone="p4"]');
+await s1.waitForTimeout(1600);
+
 step("Students: Done locks the exercise; Change my answers opens it again; Submit waits for all exercises");
 assert.equal(await s1.locator("#submit-unit").isDisabled(), true, "Submit is closed until all exercises are done");
 await s1.click('[data-done="p4"]');
@@ -163,7 +168,7 @@ await s1.waitForSelector('#ex-p4 [data-done="p4"]');
 assert.equal(await s1.locator(sel("p4", "1")).isDisabled(), false);
 await s1.click('[data-done="p4"]');
 await s1.waitForSelector("#ex-p4 .ex-foot.done");
-await t.waitForSelector('[data-ts="p4"]:has-text("done 1/2")', { timeout: 6000 });
+await t.waitForSelector('[data-ts="p4"]:has-text("done 2/2")', { timeout: 6000 });
 await s1.locator("#unit-bar").screenshot({ path: `${SHOTS}/04-student-unit-bar.png` });
 await s1.locator("#ex-p4").screenshot({ path: `${SHOTS}/04b-student-exercise.png` });
 // a link to an exercise in another section

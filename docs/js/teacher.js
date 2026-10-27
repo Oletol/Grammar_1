@@ -4,17 +4,17 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261026a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261026a";
+} from "./fb.js?v=20261027a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261027a";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2,
-} from "./common.js?v=20261026a";
-import "./speaking.js?v=20261026a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261026a";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261026a";
-import { focusCheck } from "./grammar-focus.js?v=20261026a";
+} from "./common.js?v=20261027a";
+import "./speaking.js?v=20261027a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261027a";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, sleep } from "./writing.js?v=20261027a";
+import { focusCheck } from "./grammar-focus.js?v=20261027a";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -283,7 +283,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261026a");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261027a");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,

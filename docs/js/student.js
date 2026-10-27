@@ -4,16 +4,16 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261026a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261026a";
+} from "./fb.js?v=20261027a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261027a";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
   DONE, doneMap, exerciseNumbers, planTag, gradeExercise,
-} from "./common.js?v=20261026a";
-import "./speaking.js?v=20261026a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261026a";
-import { feedbackHTML } from "./writing.js?v=20261026a";
+} from "./common.js?v=20261027a";
+import "./speaking.js?v=20261027a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261027a";
+import { feedbackHTML } from "./writing.js?v=20261027a";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -29,6 +29,7 @@ const S = {
   registering: false,
 };
 const SAVE_DELAY = 1000;
+const LOCAL_NOTE = "Saved on this device. Click Done to send the exercise to your teacher.";
 let saveTimer = null;
 
 document.title = COURSE_TITLE;
@@ -161,7 +162,6 @@ function ensureUnit(unitId) {
       if (local && local.ts > serverMs && server.status !== "submitted" && !isReleased(unitId)) {
         S.sub[unitId].answers = local.answers;
         S.sub[unitId].dirty = true;
-        scheduleSave(unitId);
       }
     } else if (!snap.metadata.hasPendingWrites) {
       // обновляем статус; ответы — только если у нас нет несохранённых правок
@@ -247,8 +247,8 @@ function renderMain() {
   }
   ensureUnit(unit.id);
   const c = S.content[unit.id], sub = S.sub[unit.id];
-  if (c === undefined || !sub) { content.innerHTML = `<p class="muted">Loading…</p>`; return; }
-  if (c === null) { content.innerHTML = `<div class="locked-msg">You do not have access to ${esc(uLabel(unit))}.</div>`; return; }
+  if (c === undefined || !sub) { content.dataset.view = ""; content.innerHTML = `<p class="muted">Loading…</p>`; return; }
+  if (c === null) { content.dataset.view = ""; content.innerHTML = `<div class="locked-msg">You do not have access to ${esc(uLabel(unit))}.</div>`; return; }
 
   const sec = c.sections.find((s) => s.id === r.section) || c.sections[0];
   const secIdx = c.sections.indexOf(sec) + 1;
@@ -262,9 +262,9 @@ function renderMain() {
   const plan = S.group.plan?.[unit.id] || {};
   const viewKey = `${unit.id}/${sec.id}/${readOnly}/${!!res}/${relEx.join(",")}/${(S.group.feedbackEx?.[unit.id] || []).join(",")}/${S.exrVer}/${JSON.stringify(done)}/${JSON.stringify(plan)}`;
 
-  // do not re-render while the student is typing (keeps the cursor in place)
-  const active = document.activeElement;
-  if (content.dataset.view === viewKey && active?.dataset?.item && content.contains(active)) {
+  // nothing on the page has changed (e.g. a draft came back from the database): only the bar is updated,
+  // so the page does not jump and the cursor stays in place
+  if (content.dataset.view === viewKey && content.dataset.unit === unit.id && !content.dataset.test) {
     renderUnitBar(unit, sub, released, res);
     return;
   }
@@ -311,7 +311,7 @@ function doneFootHTML(ex, isDone, ans) {
     <button class="btn small" type="button" data-undone="${esc(ex.id)}">Change my answers</button></div>`;
   const total = (ex.items || []).length;
   const filled = (ex.items || []).filter((it) => String(ans?.[it.id] ?? "").trim()).length;
-  return `<div class="ex-foot"><span class="muted">${filled} of ${total} answered</span>
+  return `<div class="ex-foot"><span class="muted" data-foot="${esc(ex.id)}">${filled} of ${total} answered</span>
     <button class="btn small primary" type="button" data-done="${esc(ex.id)}">${self ? "Check my answers" : "Done"}</button></div>`;
 }
 let pendingScroll = null;
@@ -379,7 +379,7 @@ function renderUnitBar(unit, sub, released, res) {
       ? `<div class="ub ub-ret"><b>Your teacher has returned this work for revision${sub.returnedAt?.toDate ? ` (${fmtTime(sub.returnedAt)})` : ""}.</b>
          ${sub.returnNote ? `<span class="ret-note">${esc(sub.returnNote)}</span>` : ""}<span class="muted">Make your changes and submit ${esc(uLabel(unit))} again.</span></div>` : "";
     const p = doneProgress(unit, sub);
-    html = ret + `<div class="ub"><span id="save-state" class="muted">${sub.dirty ? "Unsaved changes…" : sub.updatedAt ? "Draft saved " + fmtTime(sub.updatedAt) : "Your answers are saved automatically"}</span>
+    html = ret + `<div class="ub"><span id="save-state" class="muted">${sub.dirty ? LOCAL_NOTE : sub.updatedAt ? "Sent to your teacher " + fmtTime(sub.updatedAt) : "Your answers are kept on this device until you click Done"}</span>
       <span class="ub-done"><b>${p.done} / ${p.total}</b> exercises done</span>
       <button class="btn primary" id="submit-unit" ${p.left.length ? `disabled title="Mark every exercise as Done first"` : ""}>Submit ${esc(uLabel(unit))}</button>
       ${p.left.length ? `<div class="ub-left">Click <b>Done</b> under each exercise when you finish it. You can submit ${esc(uLabel(unit))} when all of them are done (Supplementary Exercises are optional). Not done yet:
@@ -409,8 +409,12 @@ function onAnswer(e) {
   sub.answers[el.dataset.ex][el.dataset.item] = v;
   sub.dirty = true;
   writeLocal(unitId, sub.answers);
-  setSaveState("Editing…");
-  scheduleSave(unitId);
+  // answers stay on this device; they go to the teacher only when the student clicks Done
+  setSaveState(LOCAL_NOTE);
+  // the "N of M answered" counter under the exercise is updated in place (no re-render)
+  const foot = document.querySelector(`[data-foot="${CSS.escape(el.dataset.ex)}"]`);
+  const ex = foot && exercisesOf(S.content[unitId]).find((x) => x.id === el.dataset.ex);
+  if (ex) foot.textContent = `${(ex.items || []).filter((it) => String(sub.answers[ex.id]?.[it.id] ?? "").trim()).length} of ${(ex.items || []).length} answered`;
 }
 
 function scheduleSave(unitId) {
@@ -438,8 +442,8 @@ async function saveDraft(unitId, status = "draft") {
     sub.updatedAt = new Date();
     sub.status = status;
     if (status === "submitted") sub.submittedAt = new Date();
-    clearLocal(unitId);
-    setSaveState("✓ Saved " + fmtTime(new Date()));
+    if (sub.dirty) writeLocal(unitId, sub.answers); else clearLocal(unitId);
+    setSaveState("✓ Sent to your teacher " + fmtTime(new Date()));
   } catch (e) {
     sub.dirty = true;
     setSaveState("⚠ Not saved: " + friendlyError(e));
@@ -450,7 +454,7 @@ async function saveDraft(unitId, status = "draft") {
 async function flushSave() {
   clearTimeout(saveTimer);
   const unitId = $("#content").dataset.unit;
-  if (unitId && S.sub[unitId]?.dirty) await saveDraft(unitId).catch(() => {});
+  if (unitId && S.sub[unitId]?.dirty) writeLocal(unitId, S.sub[unitId].answers);
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden) flushSave(); });
 window.addEventListener("pagehide", () => flushSave());
