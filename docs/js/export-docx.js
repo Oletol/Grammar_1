@@ -4,7 +4,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle,
   ShadingType, ExternalHyperlink, AlignmentType, PageBreak,
 } from "./vendor/docx.mjs";
-import { keyText, exNum } from "./common.js?v=20261110a";
+import { keyText, exNum } from "./common.js?v=20261110b";
 
 const GAP = "__________";
 const COLORS = { navy: "16233F", gold: "C08A2E", plum: "7B3F6B", teal: "1F7A72", mut: "6C7487", rule: "EEF4FB", disc: "E9F6F4", tnote: "F6EDF4", key: "FDF6E7" };
@@ -208,7 +208,7 @@ function exerciseBlocks(ex, num, keys, teacher) {
         out.push(para([new TextRun({ text: n, bold: true }), ...inlineRuns(parse(it.text)), new TextRun({ text: "   " + "_____" })], { indent: { left: 360, hanging: 300 }, after: 60 }));
       } else if (ex.kind === "mcq") {
         out.push(para([new TextRun({ text: n, bold: true }), ...inlineRuns(parse(it.text))], { indent: { left: 360, hanging: 300 }, after: 40, keepNext: true }));
-        (it.options || []).forEach((t, j) => out.push(para([new TextRun({ text: `${"ABCDEFGH"[j]}   `, bold: true, color: COLORS.gold }), ...inlineRuns(parse(t))], { indent: { left: 720 }, after: 30 })));
+        (it.options || []).forEach((t, j) => out.push(para([new TextRun({ text: `${ex.ticks ? "☐ " : ""}${"ABCDEFGH"[j]}   `, bold: true, color: COLORS.gold }), ...inlineRuns(parse(t))], { indent: { left: 720 }, after: 30 })));
       } else if (ex.kind === "open") {
         out.push(para([new TextRun({ text: n, bold: true }), ...inlineRuns(parse(it.text))], { indent: { left: 360, hanging: 300 }, after: 40 }));
         if (it.zh) out.push(para([new TextRun({ text: "中文: " + it.zh, color: COLORS.mut })], { indent: { left: 360 }, after: 40 }));

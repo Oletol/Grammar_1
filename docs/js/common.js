@@ -1,6 +1,6 @@
 // Общие функции: отрисовка упражнений, автопроверка, подсчёт баллов.
 // Используются и студенческой, и преподавательской страницей.
-import { metricsLine } from "./transcribe.js?v=20261110a";
+import { metricsLine } from "./transcribe.js?v=20261110b";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -310,10 +310,16 @@ export function renderExercise(ex, o = {}) {
       const letters = "ABCDEFGH";
       const opts = (it.options || []).map((t, i) => {
         const L = letters[i];
+        // ex.ticks: several options may be right; the student ticks them (checkboxes), the answer is the ticked letters, e.g. "BC"
+        if (ex.ticks) {
+          const on = String(val).includes(L), right = String(r ? r.correct : (o.key ? keyText(o.key[it.id]) : "")).includes(L);
+          const tcls = r ? (on ? (right ? "ok" : "bad") : "") : (o.key && right ? "right" : "");
+          return `<label class="${tcls}"><input type="checkbox" value="${L}" ${on ? "checked" : ""} ${attrs}><span class="l">${L}</span><span>${t}</span></label>`;
+        }
         const cls = r && val === L ? (r.ok ? "ok" : "bad") : (o.key && o.key[it.id] === L ? "right" : "");
         return `<label class="${cls}"><input type="radio" name="${esc(name)}" value="${L}" ${val === L ? "checked" : ""} ${attrs}><span class="l">${L}</span><span>${t}</span></label>`;
       }).join("");
-      body = `${it.text}${stat(it.id)}<div class="mcq ${ex.columns === 2 ? "cols2" : ""}">${opts}</div>${corr}`;
+      body = `${it.text}${stat(it.id)}<div class="mcq ${ex.ticks ? "ticks" : ""} ${ex.columns === 2 ? "cols2" : ""}">${opts}</div>${corr}`;
     } else if (ex.kind === "open") {
       const m = o.manual?.[it.id];
       const max = itemMax(ex, it);
@@ -390,6 +396,7 @@ export function renderExercise(ex, o = {}) {
 
 // Для matching показываем не только букву, но и текст варианта
 function showAns(ex, v) {
+  if (ex.ticks) return String(v ?? "").split("").join(" and ");
   if (ex.kind !== "match") return v;
   const op = (ex.options || []).find((o) => o.id === v);
   return op ? (ex.plain ? stripTags(op.text) : `${v}. ${stripTags(op.text)}`) : v;
@@ -407,6 +414,11 @@ function stripTags(s) {
 // Значение поля ответа из DOM-элемента
 export function readInput(el) {
   if (el.type === "radio") return el.checked ? el.value : null;
+  // ticks: all the boxes of one item together give the answer, e.g. "BC" ("" when none is ticked)
+  if (el.type === "checkbox") {
+    const box = el.closest(".mcq") || el.parentNode;
+    return [...box.querySelectorAll('input[type="checkbox"]')].filter((x) => x.checked).map((x) => x.value).join("");
+  }
   return el.value;
 }
 
