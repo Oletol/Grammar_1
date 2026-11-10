@@ -4,16 +4,17 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261027a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261027a";
+} from "./fb.js?v=20261110a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261110a";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
   DONE, doneMap, exerciseNumbers, planTag, gradeExercise,
-} from "./common.js?v=20261027a";
-import "./speaking.js?v=20261027a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261027a";
-import { feedbackHTML } from "./writing.js?v=20261027a";
+} from "./common.js?v=20261110a";
+import "./speaking.js?v=20261110a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261110a";
+import { feedbackHTML, pairFeedbackHTML } from "./writing.js?v=20261110a";
+import "./speaking.js?v=20261110a";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -260,7 +261,7 @@ function renderMain() {
   const relEx = S.group.releasedEx?.[unit.id] || [];
   const done = doneMap(sub.answers);
   const plan = S.group.plan?.[unit.id] || {};
-  const viewKey = `${unit.id}/${sec.id}/${readOnly}/${!!res}/${relEx.join(",")}/${(S.group.feedbackEx?.[unit.id] || []).join(",")}/${S.exrVer}/${JSON.stringify(done)}/${JSON.stringify(plan)}`;
+  const viewKey = `${unit.id}/${sec.id}/${readOnly}/${!!res}/${relEx.join(",")}/${(S.group.feedbackEx?.[unit.id] || []).join(",")}/${S.exrVer}/${stableJSON(done)}/${stableJSON(plan)}/${(S.group.roster || []).map((p) => p.uid).join(",")}`;
 
   // nothing on the page has changed (e.g. a draft came back from the database): only the bar is updated,
   // so the page does not jump and the cursor stays in place
@@ -268,8 +269,11 @@ function renderMain() {
     renderUnitBar(unit, sub, released, res);
     return;
   }
+  // the page has to be drawn again: remember where the student is, to put them back there afterwards
+  const keep = content.dataset.unit === unit.id && content.dataset.sec === sec.id ? rememberPlace(content) : null;
   content.dataset.view = viewKey;
   content.dataset.unit = unit.id;
+  content.dataset.sec = sec.id;
   content.innerHTML = `<header class="page-h"><div class="pe">${esc(uLabel(unit))}${meta.group ? ` &middot; ${esc(meta.group)}` : ""} &middot; ${unitNum(unit)}.${secIdx}</div>
       <h2>${esc(sec.title)}</h2>${meta.subtitle || sec.subtitle ? `<p class="pl">${esc(meta.subtitle || sec.subtitle)}</p>` : ""}</header>`
     + renderBlocks(sec.blocks, (ex) => {
@@ -284,11 +288,15 @@ function renderMain() {
       return {
         itemExtra: fb ? (itemId) => feedbackHTML(fb[itemId], { checkedAt: fmtTime(fbAt) }) : null,
         answers: sub.answers?.[ex.id] || {},
+        speech: sub.answers?._speech?.[ex.id],
+        // the classmates for the partner list of a pair discussion (names only, kept by the Teacher's Edition in the group)
+        roster: ex.pair ? (S.group.roster || []).filter((p) => p.uid !== S.user?.uid) : undefined,
         readOnly: readOnly || exDone || isDone,
         headExtra: planTag(plan[ex.id]),
         factor,
         cls: isDone || exDone ? "is-done" : "",
-        after: readOnly || exDone ? "" : doneFootHTML(ex, isDone, sub.answers?.[ex.id]),
+        // a pair discussion that the partner recorded: the teacher's check put a copy of the text and the feedback here
+        after: (ex.pair && fb?._pair ? pairFeedbackHTML(fb._pair, { checkedAt: fmtTime(fbAt) }) : "") + (readOnly || exDone ? "" : doneFootHTML(ex, isDone, sub.answers?.[ex.id])),
         auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : selfRes,
         manual: res?.manual?.[ex.id],
         showPending: !!res,
@@ -296,7 +304,59 @@ function renderMain() {
       };
     }, `${unitNum(unit)}.${secIdx}`) + pagerHTML(unit, c, sec);
   renderUnitBar(unit, sub, released, res);
+  if (keep) restorePlace(content, keep);
   if (pendingScroll) { const id = pendingScroll; pendingScroll = null; setTimeout(() => scrollToEx(id), 30); }
+}
+
+// ------------------------------------------------------------------ keeping the cursor and the scroll position
+// The unit page is drawn again when something changes in the database (the teacher marks an exercise In-Class,
+// checks an exercise, a save comes back from the server). Without this the cursor left the field the student was
+// typing in, and pictures without a known height (they load again) made the page jump up.
+const stableJSON = (v) => JSON.stringify(v, (k, x) =>
+  x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((key) => [key, x[key]])) : x);
+const fieldSel = (el) => `[data-ex="${CSS.escape(el.dataset.ex)}"][data-item="${CSS.escape(el.dataset.item)}"]`
+  + (el.type === "radio" || el.type === "checkbox" ? `[value="${CSS.escape(el.value)}"]` : "");
+function rememberPlace(content) {
+  const keep = { minH: content.offsetHeight };
+  const a = document.activeElement;
+  if (a && content.contains(a) && a.dataset?.ex && a.dataset?.item) {
+    keep.focus = fieldSel(a);
+    try { keep.sel = [a.selectionStart, a.selectionEnd, a.selectionDirection]; } catch {}
+    keep.innerTop = a.scrollTop;
+    keep.anchor = keep.focus;
+    keep.top = a.getBoundingClientRect().top;
+  } else {
+    // the first exercise (or block) that can be seen on the screen
+    const ex = [...content.querySelectorAll(".ex[id], [data-ex][data-item]")].find((el) => el.getBoundingClientRect().bottom > 70);
+    if (ex) { keep.anchor = ex.id ? `#${CSS.escape(ex.id)}` : fieldSel(ex); keep.top = ex.getBoundingClientRect().top; }
+  }
+  // the page must not get shorter for a moment while the pictures load again
+  content.style.minHeight = keep.minH + "px";
+  return keep;
+}
+let minHTimer = null;
+function restorePlace(content, keep) {
+  if (keep.focus) {
+    const el = content.querySelector(keep.focus);
+    if (el && !el.disabled) {
+      el.focus({ preventScroll: true });
+      if (keep.sel && el.setSelectionRange && keep.sel[0] != null) { try { el.setSelectionRange(...keep.sel); } catch {} }
+      if (keep.innerTop) el.scrollTop = keep.innerTop;
+    }
+  }
+  const fix = () => {
+    const el = keep.anchor && content.querySelector(keep.anchor);
+    if (el) { const d = el.getBoundingClientRect().top - keep.top; if (Math.abs(d) > 1) window.scrollBy(0, d); }
+  };
+  fix();
+  // when the pictures have loaded, take the height limit away and check the position once more
+  const imgs = [...content.querySelectorAll("img")].filter((i) => !i.complete);
+  clearTimeout(minHTimer);
+  const done = () => { content.style.minHeight = ""; fix(); };
+  if (!imgs.length) { minHTimer = setTimeout(done, 50); return; }
+  let left = imgs.length;
+  imgs.forEach((i) => { i.loading = "eager"; const f = () => { if (--left === 0) { clearTimeout(minHTimer); done(); } }; i.addEventListener("load", f, { once: true }); i.addEventListener("error", f, { once: true }); });
+  minHTimer = setTimeout(done, 3000);
 }
 
 // ------------------------------------------------------------------ "Done" for each exercise

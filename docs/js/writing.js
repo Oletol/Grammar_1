@@ -2,8 +2,9 @@
 // Octanove C1–C2, Google 10,000 frequency list as a fallback) and use of the unit's vocabulary.
 // The check runs in the teacher's browser when the teacher clicks the button; the result is
 // saved for each student in exerciseResults and shown under their text.
-import { esc } from "./common.js?v=20261027a";
-import { tenseName } from "./grammar-focus.js?v=20261027a";
+import { esc } from "./common.js?v=20261110a";
+import { tenseName } from "./grammar-focus.js?v=20261110a";
+import { metricsLine } from "./transcribe.js?v=20261110a";
 
 const LT_URL = "https://api.languagetool.org/v2/check";
 const LT_LANG = "en-GB";
@@ -86,7 +87,10 @@ export function vocabProfile(text, V, unitPhrases = []) {
 const WILD = new Set(["something", "somebody", "someone", "sb", "sth", "one's"]);
 const DET = new Set(["a", "an", "the", "my", "your", "his", "her", "its", "our", "their", "this", "that", "these", "those", "some", "any"]);
 export function phraseUsed(phrase, toks) {
-  const p = tokens(phrase).map((t) => (WILD.has(t) ? "*" : DET.has(t) ? "?" : new Set(candidates(t))));
+  // the text tokens lose their endings 're, 's, 'll… (see vocabProfile), so the phrase tokens must lose them too:
+  // otherwise "I see where you're coming from" is never found
+  const p = tokens(phrase).map((t) => t.replace(/'(s|t|ll|re|ve|d|m)$/, "")).filter((t) => t && !NOT_WORDS.has(t))
+    .map((t) => (WILD.has(t) ? "*" : DET.has(t) ? "?" : new Set(candidates(t))));
   const sets = toks.map((t) => new Set(candidates(t)));
   const same = (a, b) => [...a].some((x) => b.has(x));
   const match = (i, j) => {
@@ -106,7 +110,8 @@ export function unitVocabulary(content) {
   const out = new Set();
   for (const s of content?.sections || [])
     for (const b of s.blocks || []) {
-      if (b.type === "flashcards") (b.cards || []).forEach((c) => out.add(c.front));
+      // discussion cards are questions, not vocabulary
+      if (b.type === "flashcards" && b.style !== "discussion") (b.cards || []).forEach((c) => out.add(c.front));
       if (Array.isArray(b.vocab)) b.vocab.forEach((v) => out.add(v));
     }
   return [...out];
@@ -159,8 +164,9 @@ export function feedbackHTML(fb, { checkedAt } = {}) {
   const total = v ? LEVELS.reduce((n, l) => n + v.counts[l], 0) || 1 : 1;
   const bars = v ? LEVELS.map((l) => `<span class="lvchip lv-${l}" title="${l}: ${v.counts[l]} words">${l} <b>${Math.round((100 * v.counts[l]) / total)}%</b></span>`).join("") : "";
   return `<div class="wfb">
-    <div class="wfb-h">Feedback on your ${fb.translation ? "translation" : "text"}${checkedAt ? ` <span class="muted">· checked ${esc(checkedAt)}</span>` : ""}</div>
+      <div class="wfb-h">Feedback on your ${fb.speech ? "speaking" : fb.translation ? "translation" : "text"}${checkedAt ? ` <span class="muted">· checked ${esc(checkedAt)}</span>` : ""}</div>
     ${fb.grammarError ? `<p class="muted">The grammar check was not available this time.</p>` : ""}
+    ${fb.speech ? `<p class="wfb-line"><b>How you spoke:</b> ${esc(metricsLine(fb.speech))}</p><p class="wfb-line muted">The text was written by a computer from your recording. It can contain the computer’s mistakes, and it sometimes corrects a mistake you made, so listen to your recording too.</p>` : ""}
     <div class="wfb-text">${html}</div>
     ${issues ? `<ul class="wfb-issues">${issues}</ul>` : fb.grammarError ? "" : `<p class="wfb-ok">LanguageTool found no grammar or spelling problems.</p>`}
     ${focusHTML(fb.focus)}
@@ -189,4 +195,12 @@ function focusHTML(fc) {
     ${lines.length ? `<ul class="gf-issues">${lines.join("")}</ul>` : `<p class="wfb-ok">The tenses and the nouns match the task.</p>`}
     <p class="gf-note">This is an automatic hint. A different correct translation can also get a note here: your teacher makes the final decision.</p>
   </div>`;
+}
+
+// A pair discussion recorded by the partner: the teacher's check copies the text and the feedback into this student's results
+export function pairFeedbackHTML(p, { checkedAt } = {}) {
+  if (!p) return "";
+  const by = esc(p.byName || "your partner");
+  return `<div class="pair-fb"><p class="pair-note"><b>Your pair discussion, recorded by ${by}.</b> ${by} recorded it and turned it into text, so the text is in ${by}&rsquo;s book. `
+    + `Here is a copy with the feedback: it counts for both of you.</p>${feedbackHTML(p, { checkedAt })}</div>`;
 }

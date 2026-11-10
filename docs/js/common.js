@@ -1,5 +1,6 @@
 // Общие функции: отрисовка упражнений, автопроверка, подсчёт баллов.
 // Используются и студенческой, и преподавательской страницей.
+import { metricsLine } from "./transcribe.js?v=20261110a";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -183,7 +184,7 @@ export function buildResult({ sub, content, keys, manual = {}, showCorrect = tru
   let mScore = 0, mMax = 0, pending = 0;
   for (const ex of exercisesOf(content)) {
     if (!isManual(ex)) continue;
-    for (const it of ex.items || []) {
+    for (const it of (ex.items || []).filter((x) => !x.plain)) {   // "plain": an extra line (a partner's name) that gets no points
       mMax += itemMax(ex, it);
       const g = manual?.[ex.id]?.[it.id];
       if (g && g.score !== null && g.score !== "" && g.score !== undefined) mScore += Number(g.score) * (factors[ex.id] ?? 1);
@@ -317,7 +318,7 @@ export function renderExercise(ex, o = {}) {
       const m = o.manual?.[it.id];
       const max = itemMax(ex, it);
       let grade = "";
-      if (o.grading) {
+      if (o.grading && !it.plain) {
         grade = `<div class="grade-box">
           <label>Score <input type="number" min="0" max="${max}" step="0.5" class="g-score" data-ex="${esc(ex.id)}" data-item="${esc(it.id)}" value="${esc(m?.score ?? "")}"> / ${max}</label>
           <textarea class="g-comment" rows="2" placeholder="Comment for the student" data-ex="${esc(ex.id)}" data-item="${esc(it.id)}">${esc(m?.comment ?? "")}</textarea>
@@ -338,7 +339,21 @@ export function renderExercise(ex, o = {}) {
         const pk = o.key && o.key[pid] !== undefined ? `<span class="keyhint">✓ ${esc(keyText(o.key[pid]))}</span>` : "";
         pick = `<div class="pick"><span class="pick-l">${esc(it.pickLabel || ex.pickLabel || "Type")}:</span><select class="gap ${pm}" data-ex="${esc(ex.id)}" data-item="${esc(pid)}" ${dis}><option value="">choose…</option>${it.choices.map((c) => `<option value="${esc(c)}" ${pv === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>${pr && !pr.ok && pr.correct ? `<span class="corr">Correct: ${esc(pr.correct)}</span>` : ""}${pk}</div>`;
       }
-      body = `${src}${pick}${model}<textarea class="open-answer" rows="${it.rows || 5}" ${attrs} ${NOAUTO} placeholder="${o.readOnly ? "" : "Type your answer here…"}">${esc(val)}</textarea>${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
+      // "transcript": the text is written by the speech recogniser (speaking block with "transcribe"), not typed
+      const tr = ex.transcript && it === ex.items[0];
+      let spLine = "";
+      if (tr) { try { spLine = o.speech ? metricsLine(JSON.parse(o.speech)) : ""; } catch {} }
+      const extra = tr ? `<input type="hidden" data-ex="_speech" data-item="${esc(ex.id)}" value="${esc(o.speech || "")}" ${dis}><div class="sp-line" data-sp-line="${esc(ex.id)}">${esc(spLine)}</div>` : "";
+      const ph = o.readOnly ? "" : tr ? "Record your answer above and click Transcribe: the text will appear here." : "Type your answer here…";
+      // the partner in a pair discussion: chosen from the students of the group (the value is the student's id)
+      if (ex.pair && it.plain && Array.isArray(o.roster)) {
+        const known = o.roster.some((p) => p.uid === val);
+        const optsP = o.roster.map((p) => `<option value="${esc(p.uid)}" ${p.uid === val ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+        body = `${it.text}<select class="gap partner-sel" ${attrs}><option value="">choose your partner…</option>${optsP}`
+          + `${val && !known ? `<option value="${esc(val)}" selected>${esc(val)}</option>` : ""}</select>${o.itemExtra ? o.itemExtra(it.id) : ""}`;
+        return `<li>${body}</li>`;
+      }
+      body = `${src}${pick}${model}<textarea class="open-answer ${tr ? "transcript" : ""}" rows="${it.rows || 5}" ${attrs} ${tr ? "readonly" : ""} ${NOAUTO} placeholder="${ph}">${esc(val)}</textarea>${extra}${wc}${o.itemExtra ? o.itemExtra(it.id) : ""}${grade}`;
     }
     return `<li${play ? ' class="has-play"' : ""}>${play}${play ? `<div class="li-body">${body}</div>` : body}</li>`;
   }).join("\n");
