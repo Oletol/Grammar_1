@@ -4,18 +4,18 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261110b";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261110b";
+} from "./fb.js?v=20261111a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261111a";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
-  isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2,
-} from "./common.js?v=20261110b";
-import "./speaking.js?v=20261110b";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261110b";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261110b";
-import { focusCheck } from "./grammar-focus.js?v=20261110b";
-import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261110b";
+  isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2, hideModelAnswers,
+} from "./common.js?v=20261111a";
+import "./speaking.js?v=20261111a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261111a";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261111a";
+import { focusCheck } from "./grammar-focus.js?v=20261111a";
+import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261111a";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -347,7 +347,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261110b");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261111a");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -588,11 +588,18 @@ async function checkExercise(gid, unitId, exId) {
     if (!ex) throw new Error("Exercise not found.");
     const subs = (await getDocs(query(collection(db, "submissions"), where("groupId", "==", gid), where("unitId", "==", unitId)))).docs.map((d) => d.data());
     const answered = subs.filter((s) => Object.values(s.answers?.[exId] || {}).some((v) => String(v).trim()));
-    if (!confirm(`Check “${ex.title}” for the group and show the students their results?\nStudents who have answered: ${answered.length} of ${T.students.length}.\nAfter this, students can no longer change their answers in this exercise.`)) return;
+    // students whose answers have not reached the database: they have not clicked Done under this exercise
+    const sent = new Set(answered.map((s) => s.uid));
+    const notSent = gid === T.gid ? T.students.filter((st) => !sent.has(st.uid)).map((st) => st.name) : [];
+    if (!confirm(`Check “${ex.title}” for the group and show the students their results?\nStudents whose answers have reached you: ${answered.length} of ${T.students.length}.`
+      + (notSent.length ? `\nNot sent yet (they have not clicked Done): ${notSent.join(", ")}. Their answers to this exercise will not be checked.` : "")
+      + `\nAfter this, students can no longer change their answers in this exercise.`)) return;
     let batch = writeBatch(db), n = 0;
     for (const s of subs) {
       const r = gradeExercise(ex, s.answers?.[exId], keys[exId]);
-      if (!T.showCorrect) for (const it of Object.values(r.items)) delete it.correct;
+      // "" (not delete): the check is merged into exerciseResults, an empty value also removes an answer shown earlier
+      if (!T.showCorrect) for (const it of Object.values(r.items)) it.correct = "";
+      else hideModelAnswers(ex, r.items, keys[exId]);
       const f = factorsFor(s.uid, unitId)[exId] ?? 1;      // absent from the lesson: 25% of the points
       batch.set(doc(db, "exerciseResults", subId(unitId, s.uid)), {
         uid: s.uid, groupId: gid, unitId,

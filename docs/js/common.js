@@ -1,6 +1,6 @@
 // Общие функции: отрисовка упражнений, автопроверка, подсчёт баллов.
 // Используются и студенческой, и преподавательской страницей.
-import { metricsLine } from "./transcribe.js?v=20261110b";
+import { metricsLine } from "./transcribe.js?v=20261111a";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -170,6 +170,37 @@ export function gradeExercise(ex, answers, keys) {
   return { items, score, max: (ex.items || []).length };
 }
 
+// ------------------------------------------------------------------ which correct answers students see after a check
+// After "Check this exercise now" or "Check & release" a student sees the correct answer next to a mistake only in
+// gap-filling (a word or a verb form typed into a gap), dropdowns, multiple choice and matching. Model answers of whole
+// sentences (paraphrases, key word transformations, corrected sentences, passive transformations, translations) stay
+// in the Teacher's Edition: the student sees only that the answer is wrong. "showKey": true / false on an exercise in
+// course.json overrides the rule.
+const SENTENCE_TASK = /similar meaning|key word|transformation|transform the|paraphras|rewrit|rephras|turn the sentences|into the passive|correct the mistakes|correct mistakes|change the order|put the words in|word order with|translat|make questions|ask questions|questions about/i;
+const plainText = (h) => String(h || "").replace(/<[^>]*>/g, " ");
+export function studentMaySeeKey(ex, it, key) {
+  if (ex?.showKey === true) return true;
+  if (ex?.showKey === false) return false;
+  if (it?.choices || ex?.kind === "mcq" || ex?.kind === "match") return true;
+  if (ex?.kind !== "gap") return false;
+  if (ex.wide) return false;
+  if (SENTENCE_TASK.test(plainText(`${ex.title || ""} ${ex.rubric || ""}`))) return false;
+  return firstKey(key).split(/\s+~\s+/)[0].split(/\s+/).filter(Boolean).length < 6;
+}
+// removes the correct answers students should not see; "" (not delete) so that a merge into exerciseResults
+// also overwrites an answer saved by an earlier check
+export function hideModelAnswers(ex, items, keys) {
+  for (const it of ex.items || []) {
+    for (const id of [it.id, it.id + PICK]) {
+      const r = items?.[id];
+      if (!r) continue;
+      const pick = id !== it.id;
+      if (!(pick ? true : studentMaySeeKey(ex, it, keys?.[id]))) r.correct = "";
+    }
+  }
+  return items;
+}
+
 // Итоговый документ results/{unitId__uid}
 // factors = {exId: 0.25}: the student was absent from the lesson where this in-class exercise was done,
 // so the exercise brings only 25% of its points.
@@ -178,6 +209,8 @@ export function buildResult({ sub, content, keys, manual = {}, showCorrect = tru
   const auto = gradeAuto(content, sub.answers, keys);
   if (!showCorrect)
     for (const ex of Object.values(auto.items)) for (const r of Object.values(ex)) delete r.correct;
+  else
+    for (const ex of exercisesOf(content)) if (auto.items[ex.id]) hideModelAnswers(ex, auto.items[ex.id], keys?.[ex.id]);
   let aScore = 0;
   for (const [exId, items] of Object.entries(auto.items))
     aScore += Object.values(items).filter((r) => r.ok).length * (factors[exId] ?? 1);
@@ -268,7 +301,7 @@ export function renderExercise(ex, o = {}) {
   const a = o.answers || {};
   const dis = o.readOnly ? "disabled" : "";
   let scoreLine = "";
-  if (o.auto && isAuto(ex)) {
+  if (o.auto && isAuto(ex) && Object.keys(o.auto).length) {
     const vals = Object.values(o.auto);
     const ok = vals.filter((v) => v.ok).length;
     scoreLine = o.factor && o.factor !== 1

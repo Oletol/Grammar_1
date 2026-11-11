@@ -4,17 +4,16 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, signOut, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, orderBy,
   serverTimestamp,
-} from "./fb.js?v=20261110b";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261110b";
+} from "./fb.js?v=20261111a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261111a";
 import {
   esc, renderBlocks, readInput, fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, exercisesOf, isAuto,
   isTeacherChecked, hasPick, wireFlashcards, countWords, unitNo, unitLabel, wireLang,
   DONE, doneMap, exerciseNumbers, planTag, gradeExercise,
-} from "./common.js?v=20261110b";
-import "./speaking.js?v=20261110b";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261110b";
-import { feedbackHTML, pairFeedbackHTML } from "./writing.js?v=20261110b";
-import "./speaking.js?v=20261110b";
+} from "./common.js?v=20261111a";
+import "./speaking.js?v=20261111a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261111a";
+import { feedbackHTML, pairFeedbackHTML } from "./writing.js?v=20261111a";
 
 const $ = (s) => document.querySelector(s);
 const S = {
@@ -149,25 +148,34 @@ function ensureUnit(unitId) {
   // results of exercises that the teacher checks one by one
   S.unitUnsub["exr:" + unitId] = onSnapshot(doc(db, "exerciseResults", subId(unitId, S.user.uid)),
     (snap) => { S.exr[unitId] = snap.exists() ? snap.data() : null; S.exrVer++; renderMain(); },
-    () => { S.exr[unitId] = null; });
+    () => { S.exr[unitId] = null; S.exrVer++; renderMain(); });
   // Своя работа — тоже в реальном времени (преподаватель может «вернуть на доработку»)
   const key = "sub:" + unitId;
   S.unitUnsub[key] = onSnapshot(doc(db, "submissions", subId(unitId, S.user.uid)), (snap) => {
     const server = snap.exists() ? snap.data() : { answers: {}, status: "none" };
     const cur = S.sub[unitId];
     if (!cur) {
-      S.sub[unitId] = { ...server, dirty: false };
+      S.sub[unitId] = { ...server, dirty: false, serverAnswers: copyAnswers(server.answers) };
       // локальная копия новее серверной? (например, вкладку закрыли до отправки)
       const local = readLocal(unitId);
       const serverMs = server.updatedAt?.toMillis?.() || 0;
       if (local && local.ts > serverMs && server.status !== "submitted" && !isReleased(unitId)) {
         S.sub[unitId].answers = local.answers;
         S.sub[unitId].dirty = true;
+        // exercises marked Done on this device that never reached the teacher (e.g. the send was refused before
+        // the November 2026 fix): they are sent now, as a click on Done would do
+        const srvDone = doneMap(server.answers);
+        if (Object.keys(doneMap(local.answers)).some((x) => !srvDone[x])) setTimeout(() => saveDraft(unitId).catch(() => {}), 0);
       }
     } else if (!snap.metadata.hasPendingWrites) {
       // обновляем статус; ответы — только если у нас нет несохранённых правок
       Object.assign(cur, { status: server.status, submittedAt: server.submittedAt, updatedAt: server.updatedAt || cur.updatedAt, returnNote: server.returnNote, returnedAt: server.returnedAt });
-      if (!cur.dirty) cur.answers = server.answers || {};
+      cur.serverAnswers = copyAnswers(server.answers);
+      if (!cur.dirty) {
+        // answers to a checked exercise that never reached the database stay on the page (with a note), they cannot be sent any more
+        const keep = Object.fromEntries((S.group?.releasedEx?.[unitId] || []).filter((x) => !(x in (server.answers || {})) && cur.answers?.[x]).map((x) => [x, cur.answers[x]]));
+        cur.answers = { ...(server.answers || {}), ...keep };
+      }
     }
     syncUnitSubscriptions();
     renderNav(); renderMain();
@@ -282,12 +290,17 @@ function renderMain() {
       const fb = fbOn && !res ? S.exr[unit.id]?.feedback?.[ex.id] : null;
       const fbAt = S.exr[unit.id]?.feedbackAt?.[ex.id];
       const isDone = !!done[ex.id];
+      // a checked exercise shows the answers the teacher checked (those in the database), not a newer copy on this device
+      const sentAns = sub.serverAnswers?.[ex.id];
+      const hasSent = !!sentAns && Object.values(sentAns).some((v) => String(v ?? "").trim());
+      const myAns = exDone && hasSent ? sentAns : sub.answers?.[ex.id] || {};
+      const notSent = exDone && !hasSent && Object.values(sub.answers?.[ex.id] || {}).some((v) => String(v ?? "").trim());
       const factor = res ? res.factors?.[ex.id] : exDone ? S.exr[unit.id]?.factors?.[ex.id] : undefined;
       // self-check exercises (Supplementary Exercises): the key comes with the exercise, "Check my answers" shows the result at once
       const selfRes = ex.self && ex.selfKey && isDone && !res && !exDone ? gradeExercise(ex, sub.answers?.[ex.id] || {}, ex.selfKey).items : undefined;
       return {
         itemExtra: fb ? (itemId) => feedbackHTML(fb[itemId], { checkedAt: fmtTime(fbAt) }) : null,
-        answers: sub.answers?.[ex.id] || {},
+        answers: myAns,
         speech: sub.answers?._speech?.[ex.id],
         // the classmates for the partner list of a pair discussion (names only, kept by the Teacher's Edition in the group)
         roster: ex.pair ? (S.group.roster || []).filter((p) => p.uid !== S.user?.uid) : undefined,
@@ -300,7 +313,7 @@ function renderMain() {
         auto: res ? (isAuto(ex) || hasPick(ex) ? res.auto?.[ex.id] || {} : null) : exDone ? S.exr[unit.id]?.items?.[ex.id] || {} : selfRes,
         manual: res?.manual?.[ex.id],
         showPending: !!res,
-        tag: ex.self && ex.selfKey && !res && !exDone ? "Self-check" : ex.check === "teacher" && !res ? (exDone ? "Checked" : fb ? "Feedback ready – you can correct your text" : "Checked by your teacher") : "",
+        tag: ex.self && ex.selfKey && !res && !exDone ? "Self-check" : notSent && !res ? "Checked · your answers did not reach your teacher before the check (Done was not clicked)" : ex.check === "teacher" && !res ? (exDone ? "Checked" : fb ? "Feedback ready – you can correct your text" : "Checked by your teacher") : "",
       };
     }, `${unitNum(unit)}.${secIdx}`) + pagerHTML(unit, c, sec);
   renderUnitBar(unit, sub, released, res);
@@ -439,7 +452,9 @@ function renderUnitBar(unit, sub, released, res) {
       ? `<div class="ub ub-ret"><b>Your teacher has returned this work for revision${sub.returnedAt?.toDate ? ` (${fmtTime(sub.returnedAt)})` : ""}.</b>
          ${sub.returnNote ? `<span class="ret-note">${esc(sub.returnNote)}</span>` : ""}<span class="muted">Make your changes and submit ${esc(uLabel(unit))} again.</span></div>` : "";
     const p = doneProgress(unit, sub);
-    html = ret + `<div class="ub"><span id="save-state" class="muted">${sub.dirty ? LOCAL_NOTE : sub.updatedAt ? "Sent to your teacher " + fmtTime(sub.updatedAt) : "Your answers are kept on this device until you click Done"}</span>
+    const state = sub.saveError ? `<span id="save-state" class="save-err">⚠ ${esc(sub.saveError)}</span>`
+      : `<span id="save-state" class="muted">${sub.dirty ? LOCAL_NOTE : sub.updatedAt ? "Sent to your teacher " + fmtTime(sub.updatedAt) : "Your answers are kept on this device until you click Done"}</span>`;
+    html = ret + `<div class="ub">${state}
       <span class="ub-done"><b>${p.done} / ${p.total}</b> exercises done</span>
       <button class="btn primary" id="submit-unit" ${p.left.length ? `disabled title="Mark every exercise as Done first"` : ""}>Submit ${esc(uLabel(unit))}</button>
       ${p.left.length ? `<div class="ub-left">Click <b>Done</b> under each exercise when you finish it. You can submit ${esc(uLabel(unit))} when all of them are done (Supplementary Exercises are optional). Not done yet:
@@ -488,7 +503,7 @@ async function saveDraft(unitId, status = "draft") {
   sub.dirty = false;
   const data = {
     uid: S.user.uid, groupId: S.profile.groupId, unitId,
-    answers: sub.answers || {}, status, updatedAt: serverTimestamp(),
+    answers: answersToSend(unitId, sub), status, updatedAt: serverTimestamp(),
   };
   if (status === "submitted") data.submittedAt = serverTimestamp();
   // the teacher's comment on a returned work stays in the document
@@ -502,13 +517,34 @@ async function saveDraft(unitId, status = "draft") {
     sub.updatedAt = new Date();
     sub.status = status;
     if (status === "submitted") sub.submittedAt = new Date();
+    sub.serverAnswers = copyAnswers(data.answers);
+    sub.saveError = "";
     if (sub.dirty) writeLocal(unitId, sub.answers); else clearLocal(unitId);
     setSaveState("✓ Sent to your teacher " + fmtTime(new Date()));
+    if (!sub.dirty) renderMain();
   } catch (e) {
     sub.dirty = true;
-    setSaveState("⚠ Not saved: " + friendlyError(e));
+    writeLocal(unitId, sub.answers);
+    sub.saveError = e?.code === "permission-denied"
+      ? "Not sent to your teacher. Please reload the page (Ctrl+Shift+R, on a Mac Cmd+Shift+R) and click Done again. If this message comes back, tell your teacher."
+      : "Not sent to your teacher: " + friendlyError(e) + " Your answers are kept on this device; click Done again later.";
+    renderMain();
     throw e;
   }
+}
+
+// The database does not accept answers to an exercise the teacher has already checked (the rule protects the checked
+// answers). If this device still has other answers to such an exercise (e.g. typed after the last Done), the whole
+// send would be refused and nothing would reach the teacher any more. So those exercises are sent as the database has them.
+// a separate copy: the answers on the page change while the student types, the copy of the database must not
+const copyAnswers = (a) => JSON.parse(JSON.stringify(a || {}));
+function answersToSend(unitId, sub) {
+  const out = { ...(sub.answers || {}) };
+  const server = sub.serverAnswers || {};
+  for (const exId of S.group?.releasedEx?.[unitId] || []) {
+    if (exId in server) out[exId] = server[exId]; else delete out[exId];
+  }
+  return out;
 }
 
 async function flushSave() {
