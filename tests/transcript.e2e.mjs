@@ -62,6 +62,41 @@ await t2.click('.spk[data-tr="sp7"] [data-spk-act="rec"]').catch(() => {});
 await t2.waitForTimeout(3500);
 await t2.locator('.spk[data-tr="sp7"]').screenshot({ path: "/tmp/transcript-rec.png" });
 console.log("Transcribe buttons:", await t2.locator('.spk[data-tr="sp7"] [data-spk-act="tr"]').count());
+
+// the teacher checks the speaking: LanguageTool (mocked) without punctuation remarks, the grammar of the week
+const ltCalls = [];
+await ctx.route("https://api.languagetool.org/**", (r) => {
+  ltCalls.push(r.request().postData() || "");
+  r.fulfill({ contentType: "application/json", body: JSON.stringify({ matches: [
+    { offset: 0, length: 4, message: "Possible missing comma.", replacements: [{ value: "When," }], rule: { issueType: "typographical", category: { id: "PUNCTUATION", name: "Punctuation" } } },
+    { offset: 21, length: 4, message: "Grammar test remark.", replacements: [{ value: "x" }], rule: { issueType: "grammar", category: { id: "GRAMMAR", name: "Grammar" } } },
+  ] }) });
+});
+await t2.evaluate(() => {
+  const f = document.querySelector('textarea[data-ex="sp7"]');
+  if (f.disabled) return;
+});
+await t.evaluate(() => { location.hash = "#w7/used-class"; });
+await t.waitForSelector('[data-act=check-writing][data-ex=sp7]');
+assert.match(await t.textContent('[data-act=check-writing][data-ex=sp7]'), /Check the speaking now/);
+await t.click('[data-act=check-writing][data-ex=sp7]');
+await t.waitForFunction(() => Object.entries(JSON.parse(localStorage.getItem("mock:db"))).some(([k, v]) => k.startsWith("exerciseResults/w7") && v.feedback?.sp7));
+const exr = await t.evaluate(() => Object.entries(JSON.parse(localStorage.getItem("mock:db"))).find(([k]) => k.startsWith("exerciseResults/w7"))[1]);
+const fb = exr.feedback.sp7["1"];
+assert.ok(/motherTongue=ru/.test(ltCalls[0]), "false friends for Russian speakers");
+assert.equal(fb.issues.length, 1, "the punctuation remark on a transcript is left out");
+assert.ok(fb.gram.targets.some((x) => x.code === "UT" && x.n === 1), "used to found");
+assert.ok(fb.gram.targets.some((x) => x.code === "PaI"), "the week's targets come from the title");
+await t2.waitForSelector("#ex-sp7 .gf-h");
+const fbText = await t2.textContent("#ex-sp7 .wfb");
+assert.match(fbText, /Grammar of the week/); assert.match(fbText, /used to live/);
+await t2.locator("#ex-sp7 .wfb").screenshot({ path: "/tmp/transcript-feedback.png" });
+
+// Speaking progress: the grammar of the week column
+await t.click('a[href="#tools/speaking"]');
+await t.waitForSelector(".spk-card");
+assert.match(await t.textContent(".spk-card"), /Grammar of the week/);
+await t.locator(".spk-card").first().screenshot({ path: "/tmp/transcript-progress.png" });
 assert.deepEqual(errors, []);
 console.log("ALL OK");
 await browser.close();

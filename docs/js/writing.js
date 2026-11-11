@@ -2,9 +2,9 @@
 // Octanove C1–C2, Google 10,000 frequency list as a fallback) and use of the unit's vocabulary.
 // The check runs in the teacher's browser when the teacher clicks the button; the result is
 // saved for each student in exerciseResults and shown under their text.
-import { esc } from "./common.js?v=20261111a";
-import { tenseName } from "./grammar-focus.js?v=20261111a";
-import { metricsLine } from "./transcribe.js?v=20261111a";
+import { esc } from "./common.js?v=20261111b";
+import { tenseName, targetName } from "./grammar-focus.js?v=20261111b";
+import { metricsLine } from "./transcribe.js?v=20261111b";
 
 const LT_URL = "https://api.languagetool.org/v2/check";
 const LT_LANG = "en-GB";
@@ -73,9 +73,15 @@ export function vocabProfile(text, V, unitPhrases = []) {
     else if (!V.frequent.has(t) && !V.frequent.has(lm) && t.length > 2) off.add(t);
     return lm;
   });
+  // vocabulary level of the text: the lowest level that, with the levels below it, covers 95% of the listed words
+  // (95% lexical coverage, Laufer 1989); short texts are not judged
+  const listed = LEVELS.reduce((n, l) => n + counts[l], 0);
+  let level = "", cum = 0;
+  if (toks.length >= 30 && listed) for (const l of LEVELS) { cum += counts[l]; if (cum / listed >= 0.95) { level = l; break; } }
   return {
     words: toks.length,
     counts,
+    level,
     high: [...high].map(([w, l]) => ({ w, l })).sort((a, b) => b.l.localeCompare(a.l) || a.w.localeCompare(b.w)),
     offList: [...off].slice(0, 30),
     unitUsed: unitPhrases.filter((p) => phraseUsed(p, toks)),
@@ -119,13 +125,17 @@ export function unitVocabulary(content) {
 
 // ------------------------------------------------------------------ grammar (LanguageTool)
 // One request per student: all items of the exercise are sent together and split back.
-export async function grammarCheck(texts) {
+// motherTongue "ru" switches on LanguageTool's false-friend rules for Russian speakers (actual, accurate, magazine…).
+// speech: true – the text was written by Whisper, so punctuation, capital letters and style are not the student's:
+// those remarks are left out.
+const SPEECH_SKIP = /punctuation|typography|casing|capitalization|style|redundancy|plain english/i;
+export async function grammarCheck(texts, { speech = false } = {}) {
   const SEP = "\n\n";
   const parts = Object.entries(texts).filter(([, t]) => String(t || "").trim());
   if (!parts.length) return {};
   let full = "", spans = [];
   for (const [id, t] of parts) { spans.push({ id, start: full.length, end: full.length + t.length }); full += t + SEP; }
-  const body = new URLSearchParams({ text: full, language: LT_LANG, enabledOnly: "false" });
+  const body = new URLSearchParams({ text: full, language: LT_LANG, motherTongue: "ru", enabledOnly: "false" });
   const r = await fetch(LT_URL, { method: "POST", body, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
   if (!r.ok) throw new Error(`LanguageTool answered ${r.status}`);
   const data = await r.json();
@@ -133,6 +143,7 @@ export async function grammarCheck(texts) {
   for (const m of data.matches || []) {
     const sp = spans.find((s) => m.offset >= s.start && m.offset < s.end);
     if (!sp) continue;
+    if (speech && (["typographical", "whitespace", "style"].includes(m.rule?.issueType) || SPEECH_SKIP.test(`${m.rule?.category?.id || ""} ${m.rule?.category?.name || ""}`))) continue;
     out[sp.id].push({
       offset: m.offset - sp.start, length: m.length,
       message: m.message, short: m.shortMessage || "",
@@ -170,7 +181,9 @@ export function feedbackHTML(fb, { checkedAt } = {}) {
     <div class="wfb-text">${html}</div>
     ${issues ? `<ul class="wfb-issues">${issues}</ul>` : fb.grammarError ? "" : `<p class="wfb-ok">LanguageTool found no grammar or spelling problems.</p>`}
     ${focusHTML(fb.focus)}
+    ${gramHTML(fb.gram)}
     ${v ? `<div class="wfb-v"><span class="muted">${v.words} words</span> ${bars}</div>
+      ${v.level ? `<p class="wfb-line"><b>Vocabulary level:</b> about ${v.level} <span class="muted">(95% of the listed words are at ${v.level} or below; a rough guide, not a mark)</span></p>` : ""}
       ${v.high.length ? `<p class="wfb-line"><b>Words at B2 and above:</b> ${v.high.map((x) => `${esc(x.w)} <small>${x.l}</small>`).join(", ")}</p>` : ""}
       ${fb.unitTotal ? `<p class="wfb-line"><b>Unit phrases used (${v.unitUsed.length} of ${fb.unitTotal}):</b> ${v.unitUsed.length ? v.unitUsed.map(esc).join(", ") : "none yet"}</p>` : ""}
       ${v.offList.length ? `<p class="wfb-line muted">Not in the word lists (names, rare words or misspellings): ${v.offList.map(esc).join(", ")}</p>` : ""}` : ""}
@@ -188,12 +201,30 @@ function focusHTML(fc) {
     ...(fc.fewer || []).map((t) => `<li>Check every verb that needs the <b>${esc(tenseName(t))}</b>: your translation has fewer such forms than the task needs.</li>`),
     ...(fc.extra || []).map((e) => `<li><b>${esc(tenseName(e.tense))}</b> (${e.words.map((x) => `“${esc(x)}”`).join(", ")}): is this the right tense here?</li>`),
     ...(fc.nouns || []).map((n) => `<li>${esc(n)}</li>`),
+    ...(fc.traps || []).map((n) => `<li>${esc(n)}</li>`),
   ];
   return `<div class="gf">
     <div class="gf-h">Grammar of the week</div>
     ${chips ? `<div class="gf-forms"><span class="muted">Your verb forms:</span> ${chips}</div>` : ""}
     ${lines.length ? `<ul class="gf-issues">${lines.join("")}</ul>` : `<p class="wfb-ok">The tenses and the nouns match the task.</p>`}
     <p class="gf-note">This is an automatic hint. A different correct translation can also get a note here: your teacher makes the final decision.</p>
+  </div>`;
+}
+
+// grammar of the week in speaking and free writing: which target forms were used, tense traps, nouns
+function gramHTML(g) {
+  if (!g) return "";
+  const t = g.targets || [];
+  const used = t.filter((x) => x.n), notUsed = t.filter((x) => !x.n);
+  const chips = used.map((x) => `<span class="gf-chip"><span class="gf-w">${x.words.map(esc).join(", ")}</span> ${esc(targetName(x.code))} × ${x.n}</span>`).join("");
+  const lines = [...(g.traps || []), ...(g.nouns || [])].map((n) => `<li>${esc(n)}</li>`).join("");
+  return `<div class="gf">
+    <div class="gf-h">Grammar of the week</div>
+    ${t.length ? (chips ? `<div class="gf-forms"><span class="muted">You used:</span> ${chips}</div>` : `<p class="gf-miss">You have not used the grammar of the week yet.</p>`) : ""}
+    ${t.length && notUsed.length && used.length ? `<p class="gf-miss"><span class="muted">Not used yet:</span> ${notUsed.map((x) => esc(targetName(x.code))).join(", ")}</p>` : ""}
+    ${t.length && !used.length ? `<p class="gf-miss"><span class="muted">This week:</span> ${t.map((x) => esc(targetName(x.code))).join(", ")}</p>` : ""}
+    ${lines ? `<ul class="gf-issues">${lines}</ul>` : ""}
+    <p class="gf-note">This is an automatic hint: the computer looks for the verb forms of the week and for typical tense mistakes. Your teacher makes the final decision.</p>
   </div>`;
 }
 

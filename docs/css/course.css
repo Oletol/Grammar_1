@@ -761,3 +761,4 @@ textarea.open-answer.transcript{background:#fbfaf6;cursor:default}
 
 /* a send that failed stays visible in the bar above the unit */
 .save-err{color:var(--bad);font-weight:600;font-size:14px;flex-basis:100%}
+.gf-miss{margin:0 0 6px;font-size:14px;color:#8a3b12}

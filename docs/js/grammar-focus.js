@@ -49,9 +49,10 @@ export const TENSE_NAMES = {
   PaI: "Past Indefinite", PaC: "Past Continuous", PaP: "Past Perfect", PaPC: "Past Perfect Continuous",
   FuI: "Future Indefinite", FuC: "Future Continuous", FuP: "Future Perfect", FuPC: "Future Perfect Continuous",
   UT: "used to + infinitive", WD: "would + infinitive",
+  GT: "be going to + infinitive", ABT: "be about to + infinitive", BETO: "be to + infinitive",
 };
 // tenses the check compares (Present Indefinite of lexical verbs cannot be recognised reliably, so it is compared only through be / do)
-const COMPARED = ["PrC", "PrP", "PrPC", "PaI", "PaC", "PaP", "PaPC", "FuI", "FuC", "FuP", "FuPC", "UT", "WD"];
+const COMPARED = ["PrC", "PrP", "PrPC", "PaI", "PaC", "PaP", "PaPC", "FuI", "FuC", "FuP", "FuPC", "UT", "WD", "GT"];
 
 const isV3 = (w) => V3.has(w) || (/^[a-z]{3,}ed$/.test(w) && !NOT_ED.has(w)) || ADJ_ED.has(w);
 const isV2 = (w) => V2.has(w) || (/^[a-z]{3,}ed$/.test(w) && !NOT_ED.has(w) && !ADJ_ED.has(w));
@@ -147,10 +148,14 @@ export function verbForms(text) {
     }
     if (/^(am|is|are|was|were)$/.test(x)) {
       const pres = /^(am|is|are)$/.test(x);
+      // be about to + infinitive, be to + infinitive (only after a subject: not "the aim is to learn")
+      if (w[i + 1] === "about" && w[i + 2] === "to" && w[i + 3] && !STOP.has(w[i + 3])) { add(pres ? "ABT" : "PaI", i, i + 3); i += 3; continue; }
+      if (pres && w[i + 1] === "to" && w[i + 2] && (BASE.has(w[i + 2]) || /^(meet|start|arrive|leave|open|finish|visit|sign|take|be|come|go|begin|return|marry|speak|stay|move)$/.test(w[i + 2]))
+        && !/^(this|that|what|which|it|there|all|one|aim|goal|task|plan|idea|purpose|problem|question|thing|point|objective|job|dream|wish|answer|solution|way|rule|intention|hope|method|step|role|duty|mission|ambition|challenge)$/.test(w[i - 1] || "")) { add("BETO", i, i + 2); i += 2; continue; }
       const j = next(i, 5);
       if (j > 0 && w[j] === "being") { const k = next(j, 0); add(pres ? "PrC" : "PaC", i, k > 0 ? k : j, true); i = k > 0 ? k : j; continue; }
       if (j > 0 && isIng(w[j]) && !ADJ_ING.has(w[j])) {
-        if (w[j] === "going" && w[j + 1] === "to") { add(pres ? "PrI" : "PaI", i, j + 1); i = j + 1; continue; }   // be going to
+        if (w[j] === "going" && w[j + 1] === "to" && w[j + 2] && !STOP.has(w[j + 2]) && !DETS.test(w[j + 2])) { add(pres ? "GT" : "PaI", i, j + 2); i = j + 2; continue; }   // be going to + infinitive
         add(pres ? "PrC" : "PaC", i, j); i = j; continue;
       }
       if (j > 0 && isV3(w[j]) && !ADJ_ED.has(w[j])) { add(pres ? "PrI" : "PaI", i, j, true); i = j; continue; }
@@ -304,8 +309,108 @@ export function focusCheck(text, key) {
     fewer: best ? best.fewer : [],
     extra: best ? best.extra.map((t) => ({ tense: t, words: forms.filter((f) => f.tense === t).map((f) => f.words) })) : [],
     nouns: nouns.filter((n) => !modelNouns.has(n)),
-    ok: best ? best.score === 0 && !nouns.length : !nouns.length,
+    traps: tenseTraps(text),
+    ok: (best ? best.score === 0 : true) && !nouns.length && !tenseTraps(text).length,
   };
 }
 
 export const tenseName = (t) => TENSE_NAMES[t] || t;
+
+
+// ================================================================== grammar of the week in speaking and free writing
+// There is no model text to compare with, so the check counts the forms the week practises and looks for the
+// tense traps Russian- and Chinese-speaking students fall into. The targets come from "grammar" in course.json
+// (on the exercise or on the week) or, if there is none, from the week's title.
+export const TARGET_NAMES = {
+  ...TENSE_NAMES, PASS: "the Passive", SINCE: "since-sentences", PrCF: "Present Continuous for the future",
+};
+const TITLE_TARGETS = [
+  [/present perfect continuous/i, ["PrPC"]], [/present perfect(?! continuous)/i, ["PrP"]],
+  [/past perfect continuous/i, ["PaPC"]], [/past perfect(?! continuous)/i, ["PaP"]],
+  [/past indefinite|past simple/i, ["PaI"]], [/past continuous|past progressive/i, ["PaC"]],
+  [/present continuous/i, ["PrC"]], [/used to/i, ["UT"]], [/\bwould\b/i, ["WD"]],
+  [/futurity|future/i, ["FuI", "GT", "PrCF", "FuC", "FuP", "ABT", "BETO"]],
+  [/passive/i, ["PASS"]], [/since/i, ["SINCE"]],
+];
+export function grammarTargets(unit, ex) {
+  const list = (Array.isArray(ex?.grammar) && ex.grammar) || (Array.isArray(unit?.grammar) && unit.grammar);
+  if (list) return list.filter((c) => TARGET_NAMES[c]);
+  const title = String(unit?.title || "");
+  const out = [];
+  for (const [re, codes] of TITLE_TARGETS) if (re.test(title)) codes.forEach((c) => !out.includes(c) && out.push(c));
+  return out;
+}
+
+const sentencesOf = (text) => String(text || "").split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => /[a-z]/i.test(x));
+const FUT_TIME = /\b(tomorrow|tonight|next|soon|later|this (evening|afternoon|weekend|summer|winter|spring|autumn)|on (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (a|an|two|three|few) (minutes?|hours?|days?|weeks?|months?))\b/i;
+const PAST_TIME = /\b(yesterday|ago|last (night|week|month|year|summer|winter|spring|autumn|time|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in (19|20)\d\d|the other day|just now)\b/i;
+const STATIVE = /^(know|knowing|believe|believing|understand|understanding|want|wanting|need|needing|prefer|preferring|belong|belonging|own|owning|seem|seeming|mean|meaning|remember|remembering|contain|containing|like|liking|hate|hating|realise|realize|realising|realizing|recognise|recognising|recognize|recognizing|possess|possessing|consist|consisting)$/;
+const TIME_CONJ = /^(when|if|as soon as|before|after|until|till|unless|once|by the time)$/;
+
+// Tense traps: short hints, never a verdict (the teacher decides)
+export function tenseTraps(text) {
+  const out = [], seen = new Set();
+  const hint = (k, m) => { if (!seen.has(k)) { seen.add(k); out.push(m); } };
+  for (const sen of sentencesOf(text)) {
+    const forms = verbForms(sen), w = tokenize(sen), low = sen.toLowerCase().replace(/[’‘]/g, "'");
+    const perf = forms.find((f) => f.tense === "PrP" || f.tense === "PrPC");
+    const pastTime = low.match(PAST_TIME);
+    if (perf && pastTime && !/\bsince\b/.test(low)) hint("pt" + perf.words, `“${perf.words}” with “${pastTime[0]}”: a finished past time goes with the Past Indefinite.`);
+    if (/\bfor\b[^.?!]*\bago\b/.test(low)) hint("forago", "“for … ago”: ago goes without for (“two years ago”), and “for two years” goes without ago.");
+    // since (from that time): the main clause needs the Present Perfect (Continuous) or, in a past story, the Past Perfect
+    const si = w.indexOf("since");
+    if (si > 0 && !/\b(it|this|that) (is|was|has been|had been) [^.?!]*since\b|\b(is|was) it\b[^.?!]*since\b/.test(low.replace(/\b(it|that)'s\b/g, "$1 is"))) {
+      const after = w.slice(si + 1, si + 5).join(" ");
+      const timeSince = /^(\d|then|last|childhood|my|our|his|her|their|the (age|beginning|start|end|summer|winter|spring|autumn|morning|day|year|war)|early|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|yesterday|school|university)/.test(after)
+        || /\bsince\s+\d/.test(low) || forms.some((f) => f.at > si && f.at <= si + 4 && f.tense === "PaI");
+      const mainPerfect = forms.some((f) => f.at < si && /^(PrP|PrPC|PaP|PaPC|FuP|FuPC)$/.test(f.tense));
+      const mainVerb = forms.filter((f) => f.at < si).pop();
+      if (timeSince && !mainPerfect) hint("since", `${mainVerb ? `“${mainVerb.words} … since”` : `“${(low.match(/since\s+[\w']+/) || ["since"])[0]}”`}: with since (from that time) the main clause needs the Present Perfect (Continuous); in a story about the past, the Past Perfect (Continuous).`);
+    }
+    // will after when / if / as soon as … in a sentence with another future form
+    for (let i = 0; i < w.length; i++) {
+      const two = w[i] + " " + (w[i + 1] || ""), three = two + " " + (w[i + 2] || "");
+      const conj = TIME_CONJ.test(three) ? three : TIME_CONJ.test(two) ? two : TIME_CONJ.test(w[i]) ? w[i] : "";
+      if (!conj) continue;
+      const k = i + conj.split(" ").length;
+      if (/^(know|knew|known|wonder|wondered|ask|asked|sure|tell|told|see|saw|idea|doubt|certain|clear|decide|decided|find|out)$/.test(w[i - 1] || "")) continue;   // "I don't know when he will come": an object clause
+      const f = forms.find((x) => x.at >= k && x.at <= k + 4 && /^Fu/.test(x.tense) && !w.slice(k, x.at).includes(","));
+      const other = forms.some((x) => x !== f && (/^Fu/.test(x.tense) || x.tense === "GT"));
+      if (f && other) hint("tc" + f.words, `“${conj} … ${f.words}”: after ${conj} (time or condition) the Present is used for the future: “${conj} he comes”.`);
+    }
+    // stative verbs in the Continuous
+    for (const f of forms) {
+      if (!/^(PrC|PaC|FuC)$/.test(f.tense)) continue;          // "I've been meaning / wanting to ask" is normal
+      const v = f.words.split(" ").pop();
+      if (STATIVE.test(v)) hint("st" + f.words, `“${f.words}”: ${v.replace(/ing$/, "")} is a stative verb and is not normally used in the Continuous.`);
+    }
+    // just / already / yet with the Past Indefinite
+    const perfAny = forms.some((f) => /^(PrP|PrPC|PaP|PaPC)$/.test(f.tense));
+    const lexPast = forms.some((f) => f.tense === "PaI" && !/^(was|were|had|knew|did)$/.test(f.words.split(" ").pop()) && !STATIVE.test(f.words.split(" ").pop()));
+    if (!perfAny && lexPast && (/\b(already|yet)\b/.test(low) || /\bjust\s+[a-z]+ed\b/.test(low) || /\bjust (did|made|got|went|came|saw|heard|told|said|bought|wrote|left|found|took|gave|finished)\b/.test(low)))
+      hint("jy", "just / already / yet: the Present Perfect is usual in British English (in a story about the past, the Past Perfect).");
+    // be used to + infinitive
+    const m = low.match(/\b(am|is|are|was|were|be|been|get|got|getting)\s+used to\s+([a-z]+)\b/);
+    if (m && !/ing$/.test(m[2]) && !DETS.test(m[2]) && !PRON.has(m[2]) && BASE.has(m[2]) || (m && /^(get|go|work|live|do|make|speak|wake|drive|eat|cook|study|read|write)$/.test(m[2])))
+      hint("bu", `“${m[1]} used to ${m[2]}”: after be / get used to the -ing form is used; used to + infinitive means a past habit.`);
+  }
+  return out;
+}
+
+// which target forms the student used: [{code, n, words:[…]}] in the order of the targets
+export function grammarUse(text, targets) {
+  const forms = verbForms(text);
+  const res = [];
+  for (const code of targets || []) {
+    let hits = [];
+    if (code === "PASS") hits = forms.filter((f) => f.passive).map((f) => f.words);
+    else if (code === "SINCE") {
+      for (const sen of sentencesOf(text)) if (/\bsince\b/i.test(sen) && verbForms(sen).some((f) => f.tense === "PrP" || f.tense === "PrPC")) hits.push(sen.length > 70 ? sen.slice(0, 67) + "…" : sen);
+    } else if (code === "PrCF") {
+      for (const sen of sentencesOf(text)) if (FUT_TIME.test(sen)) hits.push(...verbForms(sen).filter((f) => f.tense === "PrC").map((f) => f.words));
+    } else hits = forms.filter((f) => f.tense === code).map((f) => f.words);
+    res.push({ code, n: hits.length, words: [...new Set(hits)].slice(0, 6) });
+  }
+  return { targets: res, traps: tenseTraps(text), nouns: nounNotes(text) };
+}
+export const targetName = (c) => TARGET_NAMES[c] || c;

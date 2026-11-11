@@ -1,8 +1,8 @@
 // Speaking: timers with an in-browser voice recorder (from the msupm2 course engine).
 // The recording never leaves the browser: it is kept in memory as a blob, played back here and,
 // if the student wants, saved to their own computer with "Download". Reloading the page clears it.
-import { registerSpeaking, esc } from "./common.js?v=20261111a";
-import { transcribeBlob, metricsLine } from "./transcribe.js?v=20261111a";
+import { registerSpeaking, esc } from "./common.js?v=20261111b";
+import { transcribeBlob, metricsLine } from "./transcribe.js?v=20261111b";
 
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const SPK = new Map();   // key -> state (survives re-rendering of the page)
@@ -271,7 +271,7 @@ async function transcribeTake(el, key, i) {
     if (h) { h.value = JSON.stringify(r.metrics); h.dispatchEvent(new Event("input", { bubbles: true })); }
     const line = document.querySelector(`[data-sp-line="${CSS.escape(exId)}"]`);
     if (line) line.textContent = metricsLine(r.metrics);
-    msg(`Done: the text of Take ${i + 1} is in the exercise below. ${esc(metricsLine(r.metrics))}.`);
+    msg(`Done: the text of Take ${i + 1} is in the exercise below. ${esc(metricsLine(r.metrics))}. <b>Click Done under the exercise</b> to send it to your teacher.`);
     f.closest(".ex")?.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (e) {
     console.warn(e);

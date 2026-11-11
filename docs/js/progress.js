@@ -1,6 +1,7 @@
 // Measures of students' speaking (Whisper transcripts) and writing, for the Progress page of the Teacher's Edition
 // and for the CSV export used in research. Everything is computed in the teacher's browser.
-import { tokens, lemma, vocabProfile } from "./writing.js?v=20261111a";
+import { tokens, lemma, vocabProfile } from "./writing.js?v=20261111b";
+import { grammarUse } from "./grammar-focus.js?v=20261111b";
 
 // Writing that is followed over time: every written open exercise the teacher checks ("check": "teacher") –
 // letters and essays, own sentences, translations; "track": "writing" adds an exercise, "track": false leaves it out.
@@ -32,8 +33,10 @@ const r3 = (x) => Math.round(x * 1000) / 1000;
 
 // text – the answer; phrases – the task (or unit) phrases; fb – the LanguageTool check saved by the teacher, if any;
 // sp – what the recorder measured {speech, total, wpm, pauses, longest, at}
-export function measure(text, V, phrases, fb, sp) {
+// targets – the grammar of the week (codes from grammar-focus.js)
+export function measure(text, V, phrases, fb, sp, targets = []) {
   text = String(text || "");
+  const gu = grammarUse(text, targets);
   const prof = vocabProfile(text, V, phrases);
   const toks = tokens(text).map((t) => t.replace(/'(s|t|ll|re|ve|d|m)$/, "")).filter(Boolean);
   const lemmas = toks.map((t) => lemma(t, V.levels));
@@ -70,6 +73,12 @@ export function measure(text, V, phrases, fb, sp) {
     ltGrammar: gram,
     errPer100: issues && words ? r1((100 * accuracy) / words) : null,
     checkedText: fb?.text || "",
+    vocabLevel: prof.level || "",
+    weekForms: targets.length ? gu.targets.reduce((n, x) => n + x.n, 0) : null,
+    weekKinds: targets.length ? gu.targets.filter((x) => x.n).length : null,
+    weekList: gu.targets.filter((x) => x.n).map((x) => `${x.code}:${x.n}`).join(" "),
+    traps: gu.traps.length + gu.nouns.length,
+    trapList: [...gu.traps, ...gu.nouns].join(" | "),
   };
 }
 
@@ -82,13 +91,16 @@ export const METRICS = [
   { id: "mattr", label: "Lexical diversity (MATTR-50)", dir: 1 },
   { id: "b2plus", label: "B2+ words, % of listed words", dir: 1 },
   { id: "phrases", label: "Task / unit phrases used", dir: 1 },
+  { id: "weekForms", label: "Grammar of the week: forms used", dir: 1 },
+  { id: "traps", label: "Tense and noun traps (automatic hints)", dir: -1 },
   { id: "subPer100", label: "Subordinating words per 100 words", dir: 1 },
   { id: "sentLen", label: "Words per sentence", dir: 1, skill: "writing" },
 ];
 
 export const CSV_COLS = ["code", "student", "group", "skill", "unit", "task_no", "exercise", "task_title", "setting", "pair", "partner", "recorded_by", "date", "submitted",
   "words", "speech_s", "recording_s", "wpm", "pauses", "pauses_per_min", "longest_pause_s", "ttr", "mattr50", "b2plus_pct", "c1plus_pct",
-  "phrases", "phrase_list", "words_per_sentence", "subordinators_per100", "lt_checked", "lt_issues_all", "lt_grammar", "errors_per100", "text", "text_at_check"];
+  "phrases", "phrase_list", "words_per_sentence", "subordinators_per100", "lt_checked", "lt_issues_all", "lt_grammar", "errors_per100",
+  "vocab_level", "week_grammar_forms", "week_grammar_kinds", "week_grammar_list", "traps", "trap_list", "text", "text_at_check"];
 
 export function toCSV(rows) {
   const q = (v) => { const s = v === null || v === undefined ? "" : String(v); return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
