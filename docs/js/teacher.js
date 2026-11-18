@@ -4,18 +4,18 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261118a";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261118a";
+} from "./fb.js?v=20261118b";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261118b";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2, hideModelAnswers,
-} from "./common.js?v=20261118a";
-import "./speaking.js?v=20261118a";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261118a";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261118a";
-import { focusCheck, grammarTargets, grammarUse } from "./grammar-focus.js?v=20261118a";
-import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261118a";
+} from "./common.js?v=20261118b";
+import "./speaking.js?v=20261118b";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261118b";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261118b";
+import { focusCheck, grammarTargets, grammarUse } from "./grammar-focus.js?v=20261118b";
+import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261118b";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -34,6 +34,7 @@ const T = {
   tests: [], testsLoaded: false, testSel: null, attempts: [], testRes: {}, testContent: {},
   unsub: [], ctxUnsub: [],
   practice: {},          // unitId -> {exId: {itemId: value}}: what the teacher types in the unit (kept in this tab only)
+  practiceRes: {},       // unitId -> {exId: items}: the result of "Check my answers" on a self-check exercise (this tab only)
   mistOpen: new Set(),   // exercises whose list of students' mistakes is open
   prog: null,            // Speaking and Writing progress: {gid, loading, tasks, rows, at, error}
   progOpt: { metric: { speaking: ls.get("progM:speaking", "wpm"), writing: ls.get("progM:writing", "words") }, student: "", setting: ls.get("progSet", ""), kind: ls.get("progKind", ""), open: null },
@@ -291,13 +292,22 @@ function viewUnit(r) {
           after: (ex.pair && fbx?._pair ? pairFeedbackHTML(fbx._pair, { checkedAt: fmtTime(vexr.feedbackAt?.[ex.id]) }) : "") + (st.items ? `<div class="mist" data-mi="${esc(ex.id)}" ${T.mistOpen.has(ex.id) ? "" : "hidden"}>${mistakesHTML(ex, st)}</div>` : ""),
         };
       }
+      // a self-check exercise: the teacher can do it as the students do and see what they see
+      const selfEx = !!(ex.self && ex.selfKey);
+      const pres = selfEx ? T.practiceRes[u.id]?.[ex.id] : null;
+      const selfFoot = !selfEx ? ""
+        : pres
+          ? `<div class="ex-foot done"><span class="ok-mark">✓ Checked, as a student sees it</span>
+             <button class="btn small" data-act="self-again" data-unit="${esc(u.id)}" data-ex="${esc(ex.id)}">Try again</button></div>`
+          : `<div class="ex-foot"><span class="muted">Answer it as a student does (click <b>Hide keys</b> above first) and check it here.</span>
+             <button class="btn small primary" data-act="self-check" data-unit="${esc(u.id)}" data-ex="${esc(ex.id)}">Check my answers</button></div>`;
       return {
-        key: d.keys[ex.id] || {}, readOnly: false,
+        key: pres ? null : d.keys[ex.id] || {}, readOnly: !!pres, auto: pres || undefined,
         answers: mine[ex.id] || {}, roster: ex.pair ? rosterOf() : undefined,
         tag: ex.self ? "Self-check by the student" : ex.check === "teacher" ? (isManual(ex) ? "Writing check by the teacher" : "Checked by the teacher") : "",
         before: g ? toolsBar(u, ex, g, st) : "",
         itemStat: st.items ? (itemId) => `<span class="istat" data-is="${esc(ex.id)}|${esc(itemId)}">${itemBadge(ex, st.items[itemId])}</span>` : null,
-        after: st.items ? `<div class="mist" data-mi="${esc(ex.id)}" ${T.mistOpen.has(ex.id) ? "" : "hidden"}>${mistakesHTML(ex, st)}</div>` : "",
+        after: (st.items ? `<div class="mist" data-mi="${esc(ex.id)}" ${T.mistOpen.has(ex.id) ? "" : "hidden"}>${mistakesHTML(ex, st)}</div>` : "") + selfFoot,
       };
     }, `${n}.${i + 1}`)
     + `<nav class="pager">
@@ -347,7 +357,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261118a");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261118b");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -442,7 +452,7 @@ function unitViewKey(r) {
   const u = T.units.find((x) => x.id === r.unit), g = group(), d = T.unitData[r.unit];
   if (!u || !d?.content) return "";
   return JSON.stringify([u.id, r.section || "", T.gid, u.status, !!g?.openUnits?.includes(u.id), !!g?.releasedUnits?.includes(u.id),
-    g?.releasedEx?.[u.id] || [], g?.feedbackEx?.[u.id] || [], g?.plan?.[u.id] || {}, Object.keys(T.practice[u.id] || {}).length > 0,
+    g?.releasedEx?.[u.id] || [], g?.feedbackEx?.[u.id] || [], g?.plan?.[u.id] || {}, Object.keys(T.practice[u.id] || {}).length > 0, Object.keys(T.practiceRes[u.id] || {}).join(","),
     // a student's answers on the page: drawn again when the student changes them or gets feedback
     T.viewAs, T.viewAs ? viewAsStamp() : "",
     // the list "Answers shown" is drawn again when the students of the group have loaded
@@ -1159,7 +1169,15 @@ document.addEventListener("click", (e) => {
       T.mistOpen.has(id) ? T.mistOpen.delete(id) : T.mistOpen.add(id);
       document.querySelectorAll(`[data-mi="${CSS.escape(id)}"]`).forEach((el) => (el.hidden = !T.mistOpen.has(id)));
     },
-    "practice-clear": () => { delete T.practice[u]; render(true); },
+    "practice-clear": () => { delete T.practice[u]; delete T.practiceRes[u]; render(true); },
+    // the teacher does a self-check exercise herself: the same checking the students get, with the notes
+    "self-check": () => {
+      const ex = exercisesOf(T.unitData[u]?.content).find((x) => x.id === b.dataset.ex);
+      if (!ex?.selfKey) return;
+      ((T.practiceRes[u] ??= {}))[ex.id] = gradeExercise(ex, T.practice[u]?.[ex.id] || {}, ex.selfKey).items;
+      render(true);
+    },
+    "self-again": () => { if (T.practiceRes[u]) delete T.practiceRes[u][b.dataset.ex]; render(true); },
     "view-as": () => setViewAs(b.dataset.uid),
     // Analytics: open the unit with this student's answers
     "view-unit-as": () => { T.viewAs = b.dataset.uid; location.hash = `#${T.unitId}`; },
