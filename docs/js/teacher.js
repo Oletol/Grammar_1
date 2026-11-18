@@ -4,18 +4,18 @@ import {
   auth, db, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, orderBy,
   writeBatch, arrayUnion, arrayRemove, serverTimestamp, deleteField,
-} from "./fb.js?v=20261111b";
-import { COURSE_TITLE } from "./firebase-config.js?v=20261111b";
+} from "./fb.js?v=20261118a";
+import { COURSE_TITLE } from "./firebase-config.js?v=20261118a";
 import {
   esc, renderBlocks, renderExercise, exercisesOf, isAuto, gradeAuto, buildResult, keyText, norm,
   fmtTime, friendlyError, authFormHTML, wireAuthForm, subId, KIND_LABEL, isTeacherChecked, hasPick, exNum, gradeExercise, readInput, wireFlashcards, isManual, unitNo, unitLabel, wireLang,
   isCorrect, doneMap, isTranslation, exerciseNumbers, fmtDate, todayISO, answerLabel, r2, hideModelAnswers,
-} from "./common.js?v=20261111b";
-import "./speaking.js?v=20261111b";
-import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261111b";
-import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261111b";
-import { focusCheck, grammarTargets, grammarUse } from "./grammar-focus.js?v=20261111b";
-import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261111b";
+} from "./common.js?v=20261118a";
+import "./speaking.js?v=20261118a";
+import { initShell, renderUnitNav, wireUnitNav } from "./shell.js?v=20261118a";
+import { loadVocab, grammarCheck, vocabProfile, unitVocabulary, feedbackHTML, pairFeedbackHTML, sleep } from "./writing.js?v=20261118a";
+import { focusCheck, grammarTargets, grammarUse } from "./grammar-focus.js?v=20261118a";
+import { isWritingTask, measure, METRICS, toCSV } from "./progress.js?v=20261118a";
 
 const $ = (s) => document.querySelector(s);
 const ls = {
@@ -347,7 +347,7 @@ async function downloadDocx(unitId, ver, btn) {
   try {
     const d = await loadUnitData(unitId);
     if (!d?.content) throw new Error("This unit has no content yet.");
-    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261111b");
+    const { exportUnitDocx, saveBlob } = await import("./export-docx.js?v=20261118a");
     const teacher = ver === "teacher";
     const sections = d.content.sections.map((s) => { const m = (u.sections || []).find((x) => x.id === s.id) || {}; return { ...s, subtitle: m.subtitle || s.subtitle || "", group: m.group || "" }; });
     const blob = await exportUnitDocx({ courseTitle: COURSE_TITLE, unitNum: unitNum(u), unitLabel: uLabel(u), unitTitle: u.title, sections,
@@ -1445,11 +1445,13 @@ function stripExercise(b, seen, where) {
   if (!b.id || seen.has(b.id)) throw new Error(`Missing or repeated exercise id “${b.id}” (${where})`);
   seen.add(b.id);
   if (!KIND_LABEL[b.kind]) throw new Error(`Exercise ${b.id}: unknown kind “${b.kind}” (gap | match | mcq | open)`);
-  const keys = {};
+  const keys = {}, whys = {};
   const items = (b.items || []).map((it) => {
-    const { answer, pickAnswer, ...rest } = it;
+    const { answer, pickAnswer, why, ...rest } = it;
     if (it.id === undefined) throw new Error(`Exercise ${b.id}: an item has no id`);
     rest.id = String(it.id);
+    // "why": a short explanation of the right answer, shown after a self-check when the student was wrong
+    if (why) whys[rest.id] = String(why);
     if (b.kind === "open" && it.choices) {
       if (!pickAnswer) throw new Error(`Exercise ${b.id}, item ${it.id}: the dropdown has no answer (pickAnswer)`);
       keys[rest.id + "-type"] = pickAnswer;
@@ -1463,7 +1465,8 @@ function stripExercise(b, seen, where) {
     return rest;
   });
   // self-check exercises ("self": true, the Supplementary Exercises): the key goes with the exercise, so that the student can check it at once
-  const self = b.self && b.kind !== "open" && b.graded !== false && Object.keys(keys).length ? { selfKey: keys } : {};
+  const self = b.self && b.kind !== "open" && b.graded !== false && Object.keys(keys).length
+    ? { selfKey: keys, ...(Object.keys(whys).length ? { selfWhy: whys } : {}) } : {};
   return { ex: { ...b, type: "exercise", items, ...self }, keys };
 }
 

@@ -1,6 +1,6 @@
 // Общие функции: отрисовка упражнений, автопроверка, подсчёт баллов.
 // Используются и студенческой, и преподавательской страницей.
-import { metricsLine } from "./transcribe.js?v=20261111b";
+import { metricsLine } from "./transcribe.js?v=20261118a";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -414,6 +414,16 @@ export function renderExercise(ex, o = {}) {
     const right = (ex.options || []).map((op) => `<li>${op.text}</li>`).join("");
     body = `<div class="match"><ol class="m-left">${left}</ol><ol class="m-right" type="a">${right}</ol></div>`;
   }
+  // "why": short explanations of the right answers. A student sees them after a self-check, for the items
+  // they got wrong only; the Teacher's Edition shows all of them (hidden together with the keys by "Hide keys").
+  const whyItems = ex.selfWhy ? (ex.items || []).filter((it) => ex.selfWhy[it.id] && (o.key ? true : o.auto?.[it.id] && !o.auto[it.id].ok)) : [];
+  const whyBox = whyItems.length
+    ? `<div class="why-box"><div class="why-h">Why these answers are right</div><ul class="why-l">${whyItems.map((it) => {
+        const right = o.auto?.[it.id]?.correct || (o.key ? keyText(o.key[it.id]) : "");
+        const n = String(it.id).match(/^\d+/)?.[0] || String(it.id);
+        return `<li><span class="why-n">${esc(n)}</span>${right ? `<b>${esc(showAns(ex, right))}</b> ` : ""}${ex.selfWhy[it.id]}</li>`;
+      }).join("")}</ul></div>`
+    : "";
   const tag = o.tag ? `<span class="ex-tag">${o.tag}</span>` : "";
   // sentences to translate in Russian or in Chinese: the student chooses the language
   const hasZh = (ex.items || []).some((it) => it.zh);
@@ -423,6 +433,7 @@ export function renderExercise(ex, o = {}) {
   ${ex.rubric ? `<p class="ex-i">${ex.rubric}</p>` : ""}
   ${ex.display === "letters" ? "" : options}
   ${body}
+  ${whyBox}
   ${o.after || ""}
 </section>`;
 }

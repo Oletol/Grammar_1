@@ -690,7 +690,7 @@ i.vb{font-family:var(--sans);font-size:.88em;color:var(--plum);white-space:nowra
 .tnote details.kx li{margin:0 0 7px;line-height:1.55}
 .tnote details.kx b{color:var(--ok)}
 .tnote .why{color:var(--mut)}
-body.keys-off .keyhint,body.keys-off .tnote{display:none!important}
+body.keys-off .keyhint,body.keys-off .tnote,body.keys-off .why-box{display:none!important}
 @media print{.tnote details.kx>summary::before{content:""}}
 /* speaking: recording turned into text (blocks with "transcribe") */
 .spk-tr{flex:1 1 100%;font-size:13.5px;line-height:1.5;color:var(--ink2);background:#eef6f5;border:1px solid #cfe5e2;border-radius:8px;padding:8px 12px}
@@ -762,3 +762,14 @@ textarea.open-answer.transcript{background:#fbfaf6;cursor:default}
 /* a send that failed stays visible in the bar above the unit */
 .save-err{color:var(--bad);font-weight:600;font-size:14px;flex-basis:100%}
 .gf-miss{margin:0 0 6px;font-size:14px;color:#8a3b12}
+
+
+/* ---------------- short explanations of the right answers (self-check exercises) ---------------- */
+.why-box{margin:14px 18px 4px;padding:10px 14px 12px;border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:var(--r2);background:#f3faf5}
+.why-h{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);margin-bottom:6px}
+.why-l{list-style:none;margin:0;padding:0}
+.why-l li{position:relative;padding:4px 0 4px 34px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
+.why-l li+li{border-top:1px solid #e3efe7}
+.why-l b{color:var(--ink);font-weight:700}
+.why-n{position:absolute;left:0;top:5px;min-width:24px;text-align:center;font-family:var(--sans);font-size:12px;font-weight:800;color:#fff;background:var(--ok);border-radius:6px;padding:1px 5px}
+.why-l a{color:var(--teal);text-decoration:underline}
