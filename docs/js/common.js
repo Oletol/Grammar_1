@@ -1,6 +1,6 @@
 // Общие функции: отрисовка упражнений, автопроверка, подсчёт баллов.
 // Используются и студенческой, и преподавательской страницей.
-import { metricsLine } from "./transcribe.js?v=20261118b";
+import { metricsLine } from "./transcribe.js?v=20261118c";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -418,7 +418,7 @@ export function renderExercise(ex, o = {}) {
   // they got wrong only; the Teacher's Edition shows all of them (hidden together with the keys by "Hide keys").
   const whyItems = ex.selfWhy ? (ex.items || []).filter((it) => ex.selfWhy[it.id] && (o.key ? true : o.auto?.[it.id] && !o.auto[it.id].ok)) : [];
   const whyBox = whyItems.length
-    ? `<div class="why-box"><div class="why-h">Why these answers are right</div><ul class="why-l">${whyItems.map((it) => {
+    ? `<div class="why-box${o.key ? " keys" : ""}"><div class="why-h">Why these answers are right</div><ul class="why-l">${whyItems.map((it) => {
         const right = o.auto?.[it.id]?.correct || (o.key ? keyText(o.key[it.id]) : "");
         const n = String(it.id).match(/^\d+/)?.[0] || String(it.id);
         return `<li><span class="why-n">${esc(n)}</span>${right ? `<b>${esc(showAns(ex, right))}</b> ` : ""}${ex.selfWhy[it.id]}</li>`;

@@ -1,7 +1,7 @@
 // Measures of students' speaking (Whisper transcripts) and writing, for the Progress page of the Teacher's Edition
 // and for the CSV export used in research. Everything is computed in the teacher's browser.
-import { tokens, lemma, vocabProfile } from "./writing.js?v=20261118b";
-import { grammarUse } from "./grammar-focus.js?v=20261118b";
+import { tokens, lemma, vocabProfile } from "./writing.js?v=20261118c";
+import { grammarUse } from "./grammar-focus.js?v=20261118c";
 
 // Writing that is followed over time: every written open exercise the teacher checks ("check": "teacher") –
 // letters and essays, own sentences, translations; "track": "writing" adds an exercise, "track": false leaves it out.
